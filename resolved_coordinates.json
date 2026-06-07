@@ -1,0 +1,44 @@
+[
+  {
+    "station": "26600",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "26603",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "26605",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "26790",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "21831",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "21366",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  },
+  {
+    "station": "22939",
+    "lat": 32.0852999,
+    "lng": 34.78176759999999,
+    "formatted_address": "Tel Aviv-Yafo, Israel"
+  }
+]
