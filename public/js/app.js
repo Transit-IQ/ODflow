@@ -96,88 +96,103 @@ const selectedStationLayer = L.layerGroup().addTo(map); // Layer group for stati
 const borderLayer = L.layerGroup().addTo(map); // Layer group for drawing neighborhood border
 let stMetric = 'tik';
 
-let activeRouteLine = null; // Store active route number (e.g., "2")
+let activeRouteLines = new Set(); // Store active route numbers
 
 function drawBusRoute(lineNumber) {
+  // Toggle selection
+  if (activeRouteLines.has(lineNumber)) {
+    activeRouteLines.delete(lineNumber);
+  } else {
+    activeRouteLines.add(lineNumber);
+  }
+
+  renderActiveRoutes();
+}
+
+function renderActiveRoutes() {
   routeLayer.clearLayers();
   routeStopsLayer.clearLayers();
   
-  // Remove active class from all line list items in sidebar
-  document.querySelectorAll('#lines li').forEach(li => li.classList.remove('active'));
-  
-  // If the clicked line is already active, deselect it and reset zoom
-  if (activeRouteLine === lineNumber) {
-    activeRouteLine = null;
+  // Highlight clicked lines in sidebar
+  document.querySelectorAll('#lines li').forEach(r => {
+    const numSpan = r.querySelector('.num');
+    if (numSpan && activeRouteLines.has(numSpan.textContent.trim())) {
+      r.classList.add('active');
+    } else {
+      r.classList.remove('active');
+    }
+  });
+
+  if (activeRouteLines.size === 0) {
     map.fitBounds([[D.bbox.minlat, D.bbox.minlon], [D.bbox.maxlat, D.bbox.maxlon]], { padding: [30, 30] });
     return;
   }
-  
-  activeRouteLine = lineNumber;
-  const routeCoords = ROUTES_DATA[lineNumber];
-  if (!routeCoords) return;
-  
-  // Highlight clicked line in sidebar
-  const rows = document.querySelectorAll('#lines li');
-  rows.forEach(r => {
-    const numSpan = r.querySelector('.num');
-    if (numSpan && numSpan.textContent.trim() === lineNumber) {
-      r.classList.add('active');
-    }
-  });
   
   const isLight = document.body.classList.contains('light-theme');
   // Render path with glowing outline and sharp inner route line
   const outerColor = isLight ? 'rgba(99, 102, 241, 0.4)' : 'rgba(34, 211, 238, 0.4)';
   const innerColor = isLight ? '#4f46e5' : '#22d3ee';
   
-  const outerLine = L.polyline(routeCoords, {
-    color: outerColor,
-    weight: 8,
-    opacity: 0.8
-  });
-  
-  const innerLine = L.polyline(routeCoords, {
-    color: innerColor,
-    weight: 4,
-    opacity: 1
-  });
-  
-  routeLayer.addLayer(outerLine);
-  routeLayer.addLayer(innerLine);
-  
-  // Draw stop markers along the route
-  const routeStops = ROUTES_STOPS[lineNumber];
-  if (routeStops && routeStops.length > 0) {
-    const stopFillColor = isLight ? '#4f46e5' : '#22d3ee';
-    const stopBorderColor = isLight ? '#ffffff' : '#0a0d14';
-    const firstStop = routeStops[0];
-    const lastStop = routeStops[routeStops.length - 1];
-    
-    routeStops.forEach((stop, idx) => {
-      const isTerminal = (idx === 0 || idx === routeStops.length - 1);
-      const m = L.circleMarker([stop.lat, stop.lon], {
-        radius: isTerminal ? 7 : 4,
-        color: stopBorderColor,
-        weight: isTerminal ? 2.5 : 1.5,
-        fillColor: stopFillColor,
-        fillOpacity: isTerminal ? 1 : 0.85,
-        className: 'route-stop-marker'
-      });
-      
-      const label = isTerminal ? '🚏 ' : '';
-      m.bindTooltip(
-        '<div class="pp">' + label + '<b>' + stop.name + '</b>' +
-        (isTerminal ? '<br><span style="color:var(--ink3);font-size:11px">תחנת ' + (idx === 0 ? 'מוצא' : 'יעד') + '</span>' : '') +
-        '</div>',
-        { className: '', direction: 'top', offset: [0, -6] }
-      );
-      
-      routeStopsLayer.addLayer(m);
+  let allBounds = null;
+
+  activeRouteLines.forEach(lineNum => {
+    const routeCoords = ROUTES_DATA[lineNum];
+    if (!routeCoords) return;
+
+    const outerLine = L.polyline(routeCoords, {
+      color: outerColor,
+      weight: 8,
+      opacity: 0.8
     });
+    
+    const innerLine = L.polyline(routeCoords, {
+      color: innerColor,
+      weight: 4,
+      opacity: 1
+    });
+    
+    routeLayer.addLayer(outerLine);
+    routeLayer.addLayer(innerLine);
+    
+    if (!allBounds) {
+      allBounds = innerLine.getBounds();
+    } else {
+      allBounds.extend(innerLine.getBounds());
+    }
+
+    // Draw stop markers along the route
+    const routeStops = ROUTES_STOPS[lineNum];
+    if (routeStops && routeStops.length > 0) {
+      const stopFillColor = isLight ? '#4f46e5' : '#22d3ee';
+      const stopBorderColor = isLight ? '#ffffff' : '#0a0d14';
+      
+      routeStops.forEach((stop, idx) => {
+        const isTerminal = (idx === 0 || idx === routeStops.length - 1);
+        const m = L.circleMarker([stop.lat, stop.lon], {
+          radius: isTerminal ? 7 : 4,
+          color: stopBorderColor,
+          weight: isTerminal ? 2.5 : 1.5,
+          fillColor: stopFillColor,
+          fillOpacity: isTerminal ? 1 : 0.85,
+          className: 'route-stop-marker'
+        });
+        
+        const label = isTerminal ? '🚏 ' : '';
+        m.bindTooltip(
+          '<div class="pp">' + label + '<b>' + stop.name + '</b>' +
+          (isTerminal ? '<br><span style="color:var(--ink3);font-size:11px">תחנת ' + (idx === 0 ? 'מוצא' : 'יעד') + '</span>' : '') +
+          '</div>',
+          { className: '', direction: 'top', offset: [0, -6] }
+        );
+        
+        routeStopsLayer.addLayer(m);
+      });
+    }
+  });
+
+  if (allBounds) {
+    map.fitBounds(allBounds, { padding: [50, 50] });
   }
-  
-  // Zoom and pan to fit the route
-  map.fitBounds(innerLine.getBounds(), { padding: [50, 50] });
 }
 
 const NEIGHBORHOOD_BORDER = [
@@ -576,7 +591,7 @@ document.getElementById('reset').onclick = () => {
   }
   state.day = 'avg';
   state.period = 'all';
-  activeRouteLine = null;
+  activeRouteLines.clear();
   routeLayer.clearLayers();
   routeStopsLayer.clearLayers();
   selectedStationLayer.clearLayers();
@@ -609,11 +624,9 @@ function updateMapTheme() {
   renderStOverview();
   drawNeighborhoodBorder(); // Redraw border to update outline contrast
   
-  // Redraw the active route with new theme colors if it is displayed
-  if (activeRouteLine) {
-    const currActive = activeRouteLine;
-    activeRouteLine = null; // Temporarily reset to trigger full redraw
-    drawBusRoute(currActive);
+  // Redraw the active routes with new theme colors if it is displayed
+  if (activeRouteLines.size > 0) {
+    renderActiveRoutes();
   }
   
   // Update state panel detail if open
