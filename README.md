@@ -38,6 +38,15 @@ npm run build
 ```
 The output will be generated in the `dist/` directory.
 
+## Deployment
+The project is configured to easily deploy to GitHub Pages using the `gh-pages` package. 
+
+To deploy the current code, simply run:
+```bash
+npm run deploy
+```
+This command will automatically build the project and push the `dist/` folder to the `gh-pages` branch on GitHub.
+
 ## Features
 - **Speed Heatmaps**: Visualizes bus speeds across road segments in the neighborhood at different times of the day.
 - **Congestion Analysis**: Highlights bottlenecks where average bus speeds drop below 15 km/h.
