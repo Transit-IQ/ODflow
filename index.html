@@ -6,6 +6,9 @@
   <title>TRANSIT IQ — שכונת התקווה</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
+  <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;900&family=Heebo:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -38,6 +41,15 @@
         <button class="btn" id="play">▶ הרצת יום</button>
         <button class="btn ghost" id="reset" title="איפוס">↺</button>
       </div>
+    </div>
+
+    <div class="block">
+      <h3>ייבוא שכבות</h3>
+      <label class="btn ghost import-btn">
+        + ייבוא GeoJSON
+        <input type="file" id="importFile" accept=".geojson,.json,.kml,.zip" multiple style="display:none">
+      </label>
+      <ul class="imported-list" id="importedList"></ul>
     </div>
 
     <div class="block">
