@@ -993,6 +993,89 @@ aside::-webkit-scrollbar-thumb {
   transition: transform 0.2s ease, fill-color 0.2s ease;
 }
 
+/* Import Layer */
+.import-btn {
+  width: 100%;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.imported-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.imported-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.imported-item .sw {
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.imported-item.on .sw {
+  background: var(--cyan);
+}
+
+.imported-item.on .sw::after {
+  background: var(--panel);
+  right: 20px;
+}
+
+.imported-name {
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+
+.imported-remove {
+  background: none;
+  border: none;
+  color: var(--ink3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.imported-remove:hover {
+  color: var(--s2);
+}
+
+/* Drop zone highlight */
+#mapwrap.drop-active::after {
+  content: "שחרר כאן קובץ GeoJSON";
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(34, 211, 238, 0.12);
+  border: 3px dashed var(--cyan);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rubik', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cyan);
+  pointer-events: none;
+}
+
 /* Adjust Leaflet zoom controls for theme */
 .leaflet-bar a {
   background-color: var(--panel) !important;

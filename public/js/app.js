@@ -660,8 +660,140 @@ applyLayers();
 // Fit to Bounding Box
 map.fitBounds([[D.bbox.minlat, D.bbox.minlon], [D.bbox.maxlat, D.bbox.maxlon]], { padding: [30, 30] });
 
+// ---- Import Layer ----
+const importedLayers = [];
+
+document.getElementById('importFile').addEventListener('change', function (e) {
+  Array.from(e.target.files).forEach(importFile);
+  this.value = '';
+});
+
+// Drag-and-drop onto the map
+const mapWrap = document.getElementById('mapwrap');
+mapWrap.addEventListener('dragover', e => { e.preventDefault(); mapWrap.classList.add('drop-active'); });
+mapWrap.addEventListener('dragleave', () => mapWrap.classList.remove('drop-active'));
+mapWrap.addEventListener('drop', e => {
+  e.preventDefault();
+  mapWrap.classList.remove('drop-active');
+  Array.from(e.dataTransfer.files).forEach(file => {
+    if (/\.(geojson|json|kml|zip)$/i.test(file.name)) importFile(file);
+  });
+});
+
+function importFile(file) {
+  const name = file.name.replace(/\.[^.]+$/, '');
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'kml') {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const doc = new DOMParser().parseFromString(ev.target.result, 'text/xml');
+        addImportedLayer(toGeoJSON.kml(doc), name);
+      } catch {
+        alert('קובץ KML לא תקין');
+      }
+    };
+    reader.readAsText(file);
+
+  } else if (ext === 'zip') {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      try {
+        const zip = await JSZip.loadAsync(ev.target.result);
+        const entries = Object.values(zip.files).filter(f => !f.dir);
+
+        const shpEntry = entries.find(f => /\.shp$/i.test(f.name));
+        const dbfEntry = entries.find(f => /\.dbf$/i.test(f.name));
+        const prjEntry = entries.find(f => /\.prj$/i.test(f.name));
+
+        if (!shpEntry || !dbfEntry) {
+          alert('קובץ ZIP לא מכיל קבצי Shapefile (.shp + .dbf)');
+          return;
+        }
+
+        const [shpBuf, dbfBuf, prjText] = await Promise.all([
+          shpEntry.async('arraybuffer'),
+          dbfEntry.async('arraybuffer'),
+          prjEntry ? prjEntry.async('string') : Promise.resolve(null)
+        ]);
+
+        const geojson = shp.combine([shp.parseShp(shpBuf, prjText), shp.parseDbf(dbfBuf)]);
+        addImportedLayer(geojson, name);
+      } catch (err) {
+        console.error('Shapefile import error:', err);
+        alert('שגיאה בייבוא Shapefile: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'geojson' || ext === 'json') {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        addImportedLayer(JSON.parse(ev.target.result), name);
+      } catch {
+        alert('קובץ GeoJSON לא תקין');
+      }
+    };
+    reader.readAsText(file);
+  }
+}
+
+function addImportedLayer(geojson, name) {
+  const isLight = document.body.classList.contains('light-theme');
+  const color = isLight ? '#0891b2' : '#22d3ee';
+
+  const layer = L.geoJSON(geojson, {
+    style: { color, weight: 2, opacity: 0.9, fillOpacity: 0.15 },
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 6, color, weight: 2, fillColor: color, fillOpacity: 0.8
+    }),
+    onEachFeature: (f, l) => {
+      if (!f.properties) return;
+      const rows = Object.entries(f.properties)
+        .filter(([, v]) => v != null)
+        .map(([k, v]) => '<tr><td style="color:var(--ink3);padding-left:8px">' + k + '</td><td>' + v + '</td></tr>')
+        .join('');
+      if (rows) l.bindPopup('<table style="font-size:12px;direction:ltr;border-collapse:collapse">' + rows + '</table>');
+    }
+  }).addTo(map);
+
+  try { map.fitBounds(layer.getBounds(), { padding: [30, 30] }); } catch {}
+
+  importedLayers.push({ layer, name, visible: true });
+  renderImportedList();
+}
+
+function renderImportedList() {
+  const el = document.getElementById('importedList');
+  el.innerHTML = importedLayers.map((item, i) =>
+    '<li class="imported-item' + (item.visible ? ' on' : '') + '">' +
+    '<div class="sw" onclick="toggleImportedLayer(' + i + ')"></div>' +
+    '<span class="imported-name" title="' + item.name + '">' + item.name + '</span>' +
+    '<button class="imported-remove" onclick="removeImportedLayer(' + i + ')" title="הסר שכבה">✕</button>' +
+    '</li>'
+  ).join('');
+}
+
+function toggleImportedLayer(idx) {
+  const item = importedLayers[idx];
+  item.visible = !item.visible;
+  if (item.visible) map.addLayer(item.layer);
+  else map.removeLayer(item.layer);
+  renderImportedList();
+}
+
+function removeImportedLayer(idx) {
+  map.removeLayer(importedLayers[idx].layer);
+  importedLayers.splice(idx, 1);
+  renderImportedList();
+}
+
 // Expose necessary functions globally for onclick attributes in dynamically rendered elements
 window.hideStPanel = hideStPanel;
 window.showStOverview = showStOverview;
 window.showStationDetail = showStationDetail;
+window.toggleImportedLayer = toggleImportedLayer;
+window.removeImportedLayer = removeImportedLayer;
 window.STATIONS = STATIONS;
