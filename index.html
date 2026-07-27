@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRANSIT IQ — תל אביב · ניתוח שכונות</title>
+  <title>TRANSIT IQ — שכונת התקווה</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
+  <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;900&family=Heebo:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -13,7 +16,7 @@
 <div id="app">
   <header>
     <div class="brand">TRANSIT<span class="iq">IQ</span></div>
-    <div class="sub">זיהוי פערי ביקוש ברשת תח״צ &nbsp;·&nbsp; <b>תל אביב</b> · בחר שכונה לניתוח</div>
+    <div class="sub">זיהוי פערי ביקוש ברשת תח״צ &nbsp;·&nbsp; פיילוט: <b>שכונת התקווה</b>, דרום־מזרח תל אביב</div>
     <div class="tag"><span class="dot"></span>מהירויות אוטובוס · רשת ארצית מסוננת לשכונה</div>
     
     <button class="theme-btn" id="themeToggle" title="שינוי ערכת צבעים">
@@ -34,17 +37,38 @@
       <h3>שעת היום</h3>
       <div class="periods" id="periods"></div>
       <div class="allp on" id="allp">כל שעות היום (ממוצע)</div>
-      <div class="spark" id="spark"></div>
       <div class="playrow">
         <button class="btn" id="play">▶ הרצת יום</button>
-        <button class="btn ghost" id="reset"> איפוס</button>
+        <button class="btn ghost" id="reset" title="איפוס">↺</button>
       </div>
+    </div>
+
+    <div class="block">
+      <h3>ייבוא שכבות</h3>
+      <label class="btn ghost import-btn">
+        + ייבוא GeoJSON
+        <input type="file" id="importFile" accept=".geojson,.json,.kml,.zip" multiple style="display:none">
+      </label>
+      <ul class="imported-list" id="importedList"></ul>
     </div>
 
     <div class="block">
       <h3>שכבות מפה</h3>
       <div class="toggle on" data-layer="speed"><span class="sw"></span><span class="tl">רשת מהירויות אוטובוס</span></div>
       <div class="toggle" data-layer="cong"><span class="sw"></span><span class="tc" style="background:var(--s2)"></span><span class="tl">מוקדי גודש (&lt;15 קמ״ש)</span></div>
+      <div class="toggle" data-layer="dest"><span class="sw"></span><span class="tc" style="background:var(--cyan)"></span><span class="tl">מוקדי תעסוקה ומסחר</span></div>
+      <div class="toggle" data-layer="flow"><span class="sw"></span><span class="tc" style="background:var(--amber)"></span><span class="tl">צירי יעד עיקריים</span></div>
+      <div class="toggle on" data-layer="st"><span class="sw"></span><span class="tc" style="background:#ff9a3c"></span><span class="tl">תחנות אוטובוס (תיקופים)</span></div>
+    </div>
+
+    <div class="block">
+      <h3>תחנות — מדד תצוגה</h3>
+      <div class="metricrow" id="metricRow">
+        <div class="metric on" data-m="tik">תיקופים</div>
+        <div class="metric" data-m="atz">עצירות</div>
+        <div class="metric" data-m="kav">קווים</div>
+      </div>
+      <div class="stsum" id="stSum"></div>
     </div>
 
     <div class="block">
@@ -59,26 +83,46 @@
       </div>
     </div>
 
+    <div class="block">
+      <h3>קווי אוטובוס בשכונה</h3>
+      <ul class="lines" id="lines"></ul>
+    </div>
+
+    <div class="block">
+      <h3>פער תח״צ מול רכב פרטי</h3>
+      <div class="note">מאותה נקודת מוצא ליעד בטווח 15 דק׳ נסיעה ברכב: <b>אוטובוס 39 דק׳</b> — פי 2.6, כולל 2 החלפות ו־6 דק׳ הליכה. מקור: מצגת TRANSIT IQ.</div>
+    </div>
+
+    <div class="block">
+      <div class="note"><b>על הנתונים:</b> מהירויות אוטובוס מתוך שכבת ה־GIS הארצית (713,943 מקטעים), מסוננת ל־4,115 מקטעי כביש בגבולות השכונה. הערכים הם קמ״ש לפי 5 ימי חול × 7 חלוני זמן. שיוך החלונות לשעות מדויקות אינו מופיע בקבצים — הוצג כפרשנות כרונולוגית. נתוני נפח נוסעים אינם כלולים בקבצים שסופקו.</div>
+    </div>
   </aside>
 
   <div id="mapwrap">
     <div class="kpis">
       <div class="kpi accent"><div class="k">מהירות אוטובוס ממוצעת · בחירה נוכחית</div><div><span class="v" id="kAvg">—</span><span class="u">קמ״ש</span></div><div class="d" id="kAvgD">ממוצע כל היום</div></div>
       <div class="kpi"><div class="k">מקטעים בגודש</div><div><span class="v" id="kCong" style="color:var(--s3)">—</span><span class="u">% מהרשת</span></div><div class="d">מהירות מתחת ל־15 קמ״ש</div></div>
-      <div class="kpi"><div class="k">מקטעי כביש בניתוח</div><div><span class="v" id="kSeg">—</span></div><div class="d" id="kSegD">בחר שכונה</div></div>
+      <div class="kpi"><div class="k">מקטעי כביש בניתוח</div><div><span class="v" id="kSeg">—</span></div><div class="d">בגבולות שכונת התקווה</div></div>
+      <div class="kpi"><div class="k">פער אוטובוס מול רכב</div><div><span class="v">2.6<span class="u">×</span></span></div><div class="d">39 דק׳ מול 15 דק׳</div></div>
     </div>
 
     <div id="map"></div>
 
     <div class="timebadge"><div class="now" id="nowLbl">—</div><div class="lbl" id="nowSub">בחר יום ושעה מהתפריט</div></div>
+
+    <div class="profile">
+      <h4>פרופיל מהירות יומי (ממוצע רשת)</h4>
+      <div class="spark" id="spark"></div>
+    </div>
+
+    <div class="stpanel" id="stpanel"><div class="x" onclick="hideStPanel()">✕</div><div id="stpanelBody"></div></div>
   </div>
 </div>
 
-<!-- Shared agency-label lookup -->
-<script src="js/agencies.js"></script>
+<!-- Data script -->
+<script src="js/data.js"></script>
+<script src="js/routes.js"></script>
 <!-- Application Logic script -->
 <script src="js/app.js"></script>
-<script src="js/neighbourhood.js"></script>
-
 </body>
 </html>
