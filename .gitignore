@@ -1,6 +1,19 @@
+# Node / frontend
 node_modules
 dist
 .env
 .DS_Store
-scripts/gtfs_data
-gtfs.zip
+
+# Python / backend
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Raw GTFS + shapefiles — large local-only inputs, see data/README.md
+# to populate this folder. Only the docs are tracked.
+/data/*
+!/data/README.md
+!/data/gtfs/
+/data/gtfs/*
+!/data/gtfs/README.md
