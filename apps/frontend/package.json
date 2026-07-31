@@ -1,7 +1,7 @@
 {
-  "name": "transit-iq-hatikva-dashboard",
+  "name": "odflow-hatikva-dashboard",
   "version": "2.0.0",
-  "description": "TRANSIT IQ HaTikva Dashboard",
+  "description": "ODFlow HaTikva Dashboard",
   "main": "index.html",
   "scripts": {
     "dev": "vite",
