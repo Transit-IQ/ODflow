@@ -1,7 +1,7 @@
 /**
- * TransitIQ — Neighbourhood Selector Module
+ * ODFlow — Neighbourhood Selector Module
  * Lets the user browse bus routes inside any of 19 Tel Aviv neighbourhoods.
- * Data is pre-computed once by backend/scripts/build_dashboard_data.py from
+ * Data is pre-computed once by apps/backend/scripts/build_dashboard_data.py from
  * the raw GTFS files — this module only reads the generated static JSON,
  * so it works on GitHub Pages with no backend running.
  * Supports multi-select with distinct per-route colors.

@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title="TransitIQ Backend",
+    title="ODFlow Backend",
     description="GTFS and GIS analysis API — Israel MOT transit data",
     version="2.0.0",
     lifespan=lifespan,

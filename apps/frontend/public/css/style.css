@@ -1,4 +1,4 @@
-/* TRANSIT IQ — Design System CSS */
+/* ODFlow — Design System CSS */
 
 :root {
   /* Default Theme (Dark Mode) Variables */
@@ -119,7 +119,7 @@ header {
   color: var(--amber);
 }
 
-.brand .iq {
+.brand .flow {
   background: var(--amber);
   color: var(--btn-ink);
   padding: 0 7px;
