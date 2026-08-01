@@ -9,8 +9,8 @@ This repo is a monorepo containing both halves of the project:
 ```
 .
 ├── apps/
-│   ├── frontend/   ← Vite static dashboard (HTML/JS/CSS), deployed to GitHub Pages
-│   │                  see apps/frontend/README.md
+│   ├── frontend/   ← Vite static dashboard, component-based ES modules under
+│   │                  src/ — deployed to GitHub Pages; see apps/frontend/README.md
 │   └── backend/    ← FastAPI service (Python) — local dev API + the offline data pipeline
 │                      see apps/backend/README.md
 └── data/           ← raw GTFS + shapefiles the backend reads from, gitignored (see data/README.md)

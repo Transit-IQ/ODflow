@@ -1,0 +1,102 @@
+/* ODflow — design tokens.
+   Mirrors the ODflow marketing site: deep navy surface, teal primary,
+   Space Grotesk headings / Inter body, so the product reads as the same product.
+
+   `data-theme` on <html> selects the set; index.html stamps it before first
+   paint and core/theme.js owns it afterwards. */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces — site --background / --card / --muted */
+  --bg: #0f1f3e;
+  --panel: #16294a;
+  --panel2: #1b3155;
+  --line: #1f3b61;
+  --line-soft: rgba(255, 255, 255, .07);
+
+  /* Ink — site --foreground / --muted-foreground */
+  --ink: #f5f5f5;
+  --ink2: #94a3b8;
+  --ink3: #6b7b93;
+
+  /* Brand — site --primary (teal) / --secondary (blue) / --accent (red) */
+  --primary: #14b8a6;
+  --primary-hi: #2dd4bf;
+  --primary-ink: #06231f;
+  --secondary: #38bdf8;
+  --danger: #f43f5e;
+
+  /* Domain hues. Every one is the colour its subject already wears on the map,
+     so a tinted control says which layer it drives:
+     teal = ridership · rose = congestion · blue = the road network
+     violet = places & land use · amber = time of day */
+  --c-ride: #14b8a6;
+  --c-cong: #f43f5e;
+  --c-net: #38bdf8;
+  --c-place: #a78bfa;
+  --c-time: #fbbf24;
+
+  /* Bus-speed bands, mirrored from core/palette.js. Band edges 8/15/22/30 km/h,
+     with 15 matching the congestion threshold the KPI reports. Validated as a
+     set against the dark basemap. */
+  --sp1: #e11d48;
+  --sp2: #f97316;
+  --sp3: #facc15;
+  --sp4: #34d399;
+  --sp5: #60a5fa;
+
+  --ramp: linear-gradient(90deg, var(--sp1), var(--sp2), var(--sp3), var(--sp4), var(--sp5));
+
+  --focus: #2dd4bf;
+  --overlay: rgba(15, 31, 62, .94);
+  --shadow: 0 8px 24px rgba(0, 0, 0, .35);
+
+  --font-sans: 'Inter', 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-head: 'Space Grotesk', 'Heebo', -apple-system, sans-serif;
+  --font-num: 'Space Grotesk', 'Inter', ui-monospace, monospace;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --head-h: 52px;
+  --side-w: 300px;
+  --kpi-h: 62px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Site light-section palette */
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel2: #f1f5f9;
+  --line: #e2e8f0;
+  --line-soft: rgba(15, 31, 62, .08);
+
+  --ink: #0f1f3e;
+  --ink2: #48566a;
+  --ink3: #657b8b;
+
+  --primary: #0f766e;
+  --primary-hi: #0d9488;
+  --primary-ink: #ffffff;
+  --secondary: #1d4ed8;
+  --danger: #be123c;
+
+  --c-ride: #0f766e;
+  --c-cong: #be123c;
+  --c-net: #1d4ed8;
+  --c-place: #6d28d9;
+  --c-time: #b45309;
+
+  /* Same five bands re-stepped for the light basemap. */
+  --sp1: #e11d48;
+  --sp2: #9a3412;
+  --sp3: #ca8a04;
+  --sp4: #15803d;
+  --sp5: #1d4ed8;
+
+  --focus: #0f766e;
+  --overlay: rgba(255, 255, 255, .95);
+  --shadow: 0 8px 24px rgba(15, 31, 62, .12);
+}

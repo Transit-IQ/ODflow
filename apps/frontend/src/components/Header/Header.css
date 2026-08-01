@@ -1,0 +1,90 @@
+header {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  /* A wash off the brand mark, echoing the site's hero backdrop. */
+  background:
+    linear-gradient(to left, rgba(20, 184, 166, .16), rgba(56, 189, 248, .07) 38%, transparent 68%),
+    var(--panel);
+  border-bottom: 1px solid var(--line);
+  z-index: 600;
+}
+
+:root[data-theme="light"] header {
+  background:
+    linear-gradient(to left, rgba(13, 148, 136, .12), rgba(29, 78, 216, .05) 38%, transparent 68%),
+    var(--panel);
+}
+
+.brand {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -.02em;
+  direction: ltr;
+}
+
+.brand .flow { color: var(--primary) }
+
+.sub {
+  color: var(--ink2);
+  font-size: 12.5px;
+  border-inline-start: 1px solid var(--line);
+  padding-inline-start: 16px;
+}
+
+.sub b { color: var(--ink); font-weight: 600 }
+
+.head-right {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tag {
+  font-size: 11px;
+  color: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse 2.4s infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+
+.icon-btn:hover { border-color: var(--primary); color: var(--primary) }
+.icon-btn svg { width: 16px; height: 16px; fill: currentColor }
+
+:root[data-theme="light"] .icon-btn .sun-icon { display: none }
+:root:not([data-theme="light"]) .icon-btn .moon-icon { display: none }
+
+@media (max-width: 900px) {
+  .sub, .tag { display: none }
+}

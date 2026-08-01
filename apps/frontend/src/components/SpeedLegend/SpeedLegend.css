@@ -1,0 +1,22 @@
+.ramp-bar { display: flex; gap: 2px; height: 10px }
+.ramp-bar span { flex: 1; border-radius: 2px }
+
+.ramp-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-num);
+  font-size: 10px;
+  color: var(--ink3);
+  margin-top: 4px;
+}
+
+.ramp-ticks i { font-style: normal }
+
+.ramp-note {
+  font-size: 10.5px;
+  color: var(--ink3);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+.ramp-note b { color: var(--ink2); font-weight: 600 }

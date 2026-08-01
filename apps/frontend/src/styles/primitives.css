@@ -1,0 +1,167 @@
+/* Pieces used by more than one component: the sidebar block, the button, the
+   layer switch, the swatch legend and the route list. A component that needs
+   one of these uses the class; a component that needs its own look styles it in
+   its own sheet. */
+
+/* ── Sidebar block ───────────────────────────────────────────────────────── */
+.block {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.block:last-child { border-bottom: 0 }
+
+/* Each block declares the hue of the thing it controls via --tint; the rule
+   beside its title is the same colour that thing wears on the map. */
+.block h3 {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  color: var(--ink2);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.block h3::before {
+  content: "";
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--tint, var(--primary));
+  flex: 0 0 auto;
+}
+
+.block h3 + h3 { margin-top: 16px }
+
+/* ── Button ──────────────────────────────────────────────────────────────── */
+.btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+
+.btn:hover { background: var(--primary-hi); border-color: var(--primary-hi) }
+
+.btn.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink2);
+  flex: 0 0 auto;
+  padding-inline: 12px;
+}
+
+.btn.ghost:hover { border-color: var(--primary); color: var(--primary); background: transparent }
+
+/* ── Layer switch ────────────────────────────────────────────────────────── */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  margin-inline: -8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.toggle:hover { background: var(--panel2) }
+.toggle.on .tl { color: var(--ink); font-weight: 500 }
+
+/* A live switch wears its own layer's colour (via --tint), so the sidebar reads
+   back what is currently drawn on the map. */
+.sw {
+  width: 32px;
+  height: 18px;
+  border-radius: 10px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  position: relative;
+  transition: background .15s;
+  flex: 0 0 auto;
+}
+
+.sw::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink3);
+  top: 2px;
+  right: 2px;
+  transition: right .15s, background .15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+
+.toggle.on .sw { background: var(--tint, var(--primary)); border-color: transparent }
+.toggle.on .sw::after { background: #fff; right: 16px }
+
+.toggle .tl { font-size: 12.5px; flex: 1; color: var(--ink2) }
+.toggle .tc { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto }
+
+/* ── Swatch legend ───────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--ink2);
+}
+
+.lg { display: flex; align-items: center; gap: 8px }
+.lg span { width: 22px; height: 9px; border-radius: 2px; flex: 0 0 auto }
+
+/* ── Route list ──────────────────────────────────────────────────────────── */
+.lines-scroll { overflow-y: auto; overscroll-behavior: contain }
+.lines { list-style: none }
+
+.lines li {
+  font-size: 12px;
+  color: var(--ink2);
+  padding: 5px 7px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background .12s;
+}
+
+.lines li:hover { background: var(--panel2); color: var(--ink) }
+
+.lines .num {
+  font-family: var(--font-num);
+  font-weight: 700;
+  min-width: 34px;
+  text-align: center;
+  border-radius: 4px;
+  padding: 2px 0;
+  font-size: 11.5px;
+  flex: 0 0 auto;
+}
+
+.lines .desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lines .ag { font-size: 10px; color: var(--ink3); flex: 0 0 auto }
