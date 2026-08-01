@@ -64,6 +64,8 @@ function injectSidebarBlock() {
         <h3>קווי אוטובוס בשכונה</h3>
         <div class="neigh-header" id="neighHeader"></div>
 
+        <div class="neigh-stats" id="neighStats" style="display:none"></div>
+
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <button class="btn ghost" id="neighSelectAll" style="flex:1;font-size:11px;padding:6px">בחר הכל</button>
           <button class="btn ghost" id="neighClear"     style="flex:1;font-size:11px;padding:6px">נקה</button>
@@ -90,6 +92,16 @@ function injectSidebarBlock() {
 function injectStyles() {
   const style = document.createElement('style');
   style.textContent = `
+    .neigh-stats {
+      margin:8px 0; padding:8px; border-radius:8px;
+      border:1px solid var(--line); background:var(--panel2);
+    }
+    .neigh-stat-row { display:flex; gap:6px; text-align:center }
+    .neigh-stat { flex:1; display:flex; flex-direction:column; gap:2px }
+    .neigh-stat-val { font-size:15px; font-weight:700; color:var(--amber) }
+    .neigh-stat-lbl { font-size:10px; opacity:.75 }
+    .neigh-stat-src { margin-top:6px; font-size:9px; opacity:.55; text-align:center }
+
     .neigh-select-wrap { margin-bottom:8px }
     .neigh-select {
       width:100%; padding:8px 10px; border-radius:8px;
@@ -229,10 +241,54 @@ async function onNeighSelect() {
   const count = NS.routesInNeigh.length;
   document.getElementById('neighHeader').innerHTML =
     `<b>${neigh.name}</b> · <span style="color:var(--amber)">${numFmt(count)}</span> קווים פעילים ב-GTFS`;
+
+  renderPopulation(neigh);
   document.getElementById('neighCount').textContent =
     count > 0 ? `${numFmt(count)} קווים · לחץ לבחירה (ניתן לבחור מספר)` : 'לא נמצאו קווים באזור זה';
 
   renderRouteList();
+}
+
+// ── Render population ─────────────────────────────────────────────────────────
+// Real resident counts, apportioned from CBS statistical areas onto the official
+// municipal neighbourhood polygon by the offline pipeline. Neighbourhoods with no
+// official polygon (a boulevard, a retail complex, a zone outside the city limits)
+// carry no population and the block simply stays hidden — better an absent figure
+// than a fabricated one.
+function renderPopulation(neigh) {
+  const el = document.getElementById('neighStats');
+  const pop = neigh.population;
+
+  if (!pop || !pop.total) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  const age = pop.by_age || {};
+  const sum = (...keys) => keys.reduce((acc, k) => acc + (age[k] || 0), 0);
+  const young = sum('g0to9', 'g10to19');
+  const senior = sum('g60to69', 'g70to79', 'g80up');
+  const pct = n => pop.total ? Math.round((n / pop.total) * 100) : 0;
+
+  el.innerHTML = `
+    <div class="neigh-stat-row">
+      <div class="neigh-stat">
+        <span class="neigh-stat-val">${numFmt(pop.total)}</span>
+        <span class="neigh-stat-lbl">תושבים</span>
+      </div>
+      <div class="neigh-stat">
+        <span class="neigh-stat-val">${pct(young)}%</span>
+        <span class="neigh-stat-lbl">בני 0–19</span>
+      </div>
+      <div class="neigh-stat">
+        <span class="neigh-stat-val">${pct(senior)}%</span>
+        <span class="neigh-stat-lbl">בני 60+</span>
+      </div>
+    </div>
+    <div class="neigh-stat-src">מקור: אזורים סטטיסטיים למ״ס 2022, עיריית תל אביב-יפו</div>
+  `;
+  el.style.display = 'block';
 }
 
 // ── Render route list ─────────────────────────────────────────────────────────
@@ -303,8 +359,8 @@ function clearAllRoutes() {
 }
 
 // ── Neighbourhood highlight ────────────────────────────────────────────────────
-// `neigh.boundary` is a real polygon fetched once from OpenStreetMap (see
-// data/neighbourhood_boundaries.json) — it exists for most, but not all, of
+// `neigh.boundary` is an official municipal polygon (Tel Aviv-Yafo neighbourhood
+// layer, matched by ms_shchuna) — it exists for most, but not all, of
 // these areas (some are informal/colloquial zones — a shopping-mall complex,
 // "city center", a boulevard — with no official boundary to fetch; those fall
 // back to the configured bbox rectangle, which stays only an approximate

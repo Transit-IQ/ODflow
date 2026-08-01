@@ -4,7 +4,10 @@ import pyproj
 from typing import Optional
 from shapely.geometry import Polygon, LineString
 
-from paths import GTFS_DIR as DATA_DIR
+# NOTE: this module used to import GTFS_DIR aliased as DATA_DIR, so "DATA_DIR" here
+# meant data/gtfs/, not data/. The shapefile lookup below searches the whole data/
+# tree, so it no longer matters where under data/ a layer is filed.
+from paths import DATA_DIR
 
 # Shared state
 _gis_data: Optional[dict] = None
@@ -43,12 +46,42 @@ def itm_points_to_wgs84(points):
     lons, lats = _itm_transformer.transform(es, ns)
     return list(zip(lats, lons))
 
+def _find_shapefile(stem: str) -> str:
+    """
+    Locate ``<stem>.shp`` anywhere under data/, by searching rather than by hardcoding
+    a path.
+
+    The municipal layers live in Hebrew-named folders (``גבול העיר``), and a hardcoded
+    Hebrew literal is fragile: macOS may store the name in a different Unicode
+    normalisation (NFD) than the one written in this file (NFC), in which case an exact
+    string comparison misses a directory that is plainly there in `ls`. Matching on the
+    ASCII shapefile stem sidesteps that entirely, and also survives the folder being
+    renamed or re-nested.
+
+    Raises with a directory listing attached, so a miss is diagnosable instead of just
+    "could not be opened".
+    """
+    matches = sorted(DATA_DIR.glob(f"**/{stem}.shp"))
+    # Require the sibling files pyshp actually needs, so a stray/partial copy doesn't win.
+    complete = [m for m in matches if m.with_suffix(".dbf").exists() and m.with_suffix(".shx").exists()]
+    if complete:
+        return str(complete[0])
+
+    found = "\n".join(f"    {p.relative_to(DATA_DIR)}" for p in sorted(DATA_DIR.glob("**/*.shp"))) or "    (none)"
+    raise FileNotFoundError(
+        f"Could not find a complete '{stem}' shapefile (.shp + .shx + .dbf) under {DATA_DIR}.\n"
+        f"  Shapefiles that ARE present:\n{found}\n"
+        f"  Incomplete matches for this stem: {[str(m.relative_to(DATA_DIR)) for m in matches] or 'none'}"
+    )
+
+
 def _build_gis_index():
     global _gis_data, _gis_error
     try:
         print("[GIS] Loading City Limits...")
-        city_path = DATA_DIR / "גבול העיר" / "City Limits.shp"
-        with shapefile.Reader(str(city_path)) as city_sf:
+        city_path = _find_shapefile("City Limits")
+        print(f"[GIS]   -> {city_path}")
+        with shapefile.Reader(city_path) as city_sf:
             city_shape = city_sf.shape(0)
             
             # Extract boundary as WGS84 GeoJSON
@@ -68,8 +101,9 @@ def _build_gis_index():
             city_bbox = city_shape.bbox
 
         print("[GIS] Loading BUS_SPEED (this will take a minute)...")
-        speed_path = DATA_DIR / "BUS_SPEED" / "BUS_SPEED.shp"
-        with shapefile.Reader(str(speed_path)) as speed_sf:
+        speed_path = _find_shapefile("BUS_SPEED")
+        print(f"[GIS]   -> {speed_path}")
+        with shapefile.Reader(speed_path) as speed_sf:
             
             # Find indices of speed fields d_1_h_1 through d_5_h_7
             # Fields in pyshp include DeletionFlag at index 0.

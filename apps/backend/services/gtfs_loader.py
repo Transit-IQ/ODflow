@@ -80,10 +80,12 @@ def _build_index():
         stops_df = stops_df.set_index("stop_id")
 
         print("[GTFS] Loading shapes.txt (211 MB)...")
+        # Same reasoning as stop_times below: shape_id repeats across millions of
+        # points, so `category` avoids holding millions of duplicate Python strings.
         shapes_df = pd.read_csv(
             GTFS_DIR / "shapes.txt",
             usecols=["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"],
-            dtype={"shape_id": str, "shape_pt_sequence": int},
+            dtype={"shape_id": "category", "shape_pt_sequence": "int32"},
         )
         shapes_df = shapes_df.copy()
         shapes_df.loc[:, "shape_pt_lat"] = pd.to_numeric(shapes_df["shape_pt_lat"], errors="coerce")
@@ -92,8 +94,13 @@ def _build_index():
         shapes_df = shapes_df.sort_values(["shape_id", "shape_pt_sequence"])
 
         shapes: dict[str, list] = {}
-        for shape_id, grp in shapes_df.groupby("shape_id"):
+        for shape_id, grp in shapes_df.groupby("shape_id", observed=True, sort=False):
             shapes[shape_id] = grp[["shape_pt_lat", "shape_pt_lon"]].values.tolist()
+
+        # The DataFrame and the dict hold the same millions of points twice over, and
+        # only the dict is used from here on. Releasing it here roughly halves the
+        # memory floor that stop_times then has to load on top of.
+        del shapes_df
 
         # ── Optional: stop_times ──────────────────────────────────────────────
         trip_stops: dict[str, list] = {}
@@ -104,19 +111,31 @@ def _build_index():
         stop_times_path = GTFS_DIR / "stop_times.txt"
         if stop_times_path.exists():
             print("[GTFS] Loading stop_times.txt (458 MB)...")
+            # stop_times.txt is ~9M rows. Held as plain `str` columns that is several
+            # GB of Python string objects and will OOM a modest machine. trip_id,
+            # stop_id and departure_time are all low-cardinality relative to the row
+            # count, so `category` stores them as int codes + one copy of each distinct
+            # value — same values, ~10x less memory.
             st = pd.read_csv(
                 stop_times_path,
                 usecols=["trip_id", "stop_id", "stop_sequence", "departure_time"],
-                dtype={"trip_id": str, "stop_id": str, "stop_sequence": int,
-                       "departure_time": str},
+                dtype={"trip_id": "category", "stop_id": "category",
+                       "stop_sequence": "int32", "departure_time": "category"},
             )
-            st = st.copy()
-            st.loc[:, "departure_time"] = st["departure_time"].fillna("00:00:00")
+            # fillna on a categorical needs the fill value to be a known category first.
+            if "00:00:00" not in st["departure_time"].cat.categories:
+                st["departure_time"] = st["departure_time"].cat.add_categories(["00:00:00"])
+            st["departure_time"] = st["departure_time"].fillna("00:00:00")
             st = st.sort_values(["trip_id", "stop_sequence"])
 
-            # Build trip_stops
-            for trip_id, grp in st.groupby("trip_id"):
-                trip_stops[trip_id] = grp["stop_id"].tolist()
+            # Build trip_stops. Rows are already ordered by stop_sequence within each
+            # trip, so a grouped list aggregation gives the same sequence the previous
+            # per-group Python loop did, without materialising 500k sub-frames.
+            trip_stops = (
+                st.groupby("trip_id", observed=True, sort=False)["stop_id"]
+                .agg(list)
+                .to_dict()
+            )
 
             print("[GTFS] Computing frequency/hourly distribution...")
             first_dep = st.drop_duplicates(subset="trip_id", keep="first")[["trip_id", "departure_time"]].copy()
@@ -147,11 +166,17 @@ def _build_index():
             # ── stop_routes: stop_id → frozenset(route_id) ───────────────────
             print("[GTFS] Building stop→routes index...")
             trip_route_map = trips[["trip_id", "route_id"]].drop_duplicates()
+            # Match the categorical dtype on both sides of the join key, otherwise the
+            # merge silently widens ~9M rows back out to Python string objects — the
+            # exact memory blow-up the category dtype above exists to avoid. trip_ids
+            # in trips but absent from stop_times become NaN and drop out, which is
+            # correct: they have no stop_times rows to contribute anyway.
+            trip_route_map = trip_route_map.astype({"trip_id": st["trip_id"].dtype})
             stop_trip_pairs = st[["stop_id", "trip_id"]].drop_duplicates()
             stop_route_df = stop_trip_pairs.merge(trip_route_map, on="trip_id", how="left")
             stop_route_df = stop_route_df.dropna(subset=["route_id"])
             # group: stop_id → frozenset of route_ids
-            stop_routes_series = stop_route_df.groupby("stop_id")["route_id"].apply(frozenset)
+            stop_routes_series = stop_route_df.groupby("stop_id", observed=True)["route_id"].apply(frozenset)
             stop_routes: dict[str, frozenset] = stop_routes_series.to_dict()
             print(f"[GTFS] stop_routes: {len(stop_routes)} stops indexed")
 
