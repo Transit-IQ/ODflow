@@ -18,7 +18,9 @@ relates to `apps/frontend/`.
 │       ├── main.py              FastAPI app — live/interactive API, used for local dev only
 │       ├── paths.py             single source of truth for repo-relative filesystem layout
 │       ├── routers/
-│       ├── services/            shared GTFS/GIS loading logic, used by both main.py and the pipeline
+│       ├── services/            shared loaders, used by both main.py and the pipeline:
+│       │                          gtfs_loader (timetable), gis_loader (ITM shapefiles),
+│       │                          municipal_loader (city KML layers), taltan_loader (stop survey)
 │       ├── scripts/
 │       │   └── build_dashboard_data.py   ← run this to (re)generate apps/frontend/public/data/*.json
 │       └── requirements.txt

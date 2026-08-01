@@ -9,22 +9,33 @@ This folder contains all raw inputs consumed by `../apps/backend/scripts/build_d
 | Path | Format | Used for |
 |---|---|---|
 | `gtfs/agency.txt`, `routes.txt`, `trips.txt`, `stops.txt`, `shapes.txt`, `stop_times.txt` | GTFS text | Bus lines, stops, shapes, trip frequency (see `gtfs/README.md`) |
-| `municipal/BUS_SPEED/` | Shapefile (ITM) | Per-segment bus speed by day-of-week × time-of-day, fields `d_1_h_1`…`d_5_h_7` (35 values/segment, 713,943 segments) |
+| `hazav/BUS_SPEED/` | Shapefile (ITM) | Per-segment bus speed by day-of-week × time-of-day, fields `d_1_h_1`…`d_5_h_7` (35 values/segment, 713,943 segments) |
 | `municipal/גבול העיר/` | Shapefile (ITM) | Tel Aviv city-limits polygon, used to clip the speed segments |
-| `neighbourhoods.json` | JSON | Config: the 19 selectable neighbourhoods (id, Hebrew name, center, bbox, `official_ms_shchuna`) — an input parameter, not derived data |
-| `municipal/neighbourhoods/` | KML + Shapefile | **71 official municipal neighbourhood polygons** — see below |
+| `taltan/stations/` | Shapefile (ITM + WGS-84 columns) | **33,661 surveyed stops with boardings, calls and rider mix** — the only ridership source in the project, see below |
+| `taltan/NatazEX_shape_202605/`, `taltan/fcl_area_shape_202605/` | Shapefile (ITM) | Bus-lane segments and terminal/depot sites. Present in the source set; **not read by the pipeline yet** |
+| `municipal/neighbourhoods/` | KML + Shapefile | **71 official municipal neighbourhood polygons** — the sole source of the selectable-neighbourhood list, see below |
 | `municipal/אזורים סטטיסטים/` | KML + Shapefile | **184 CBS statistical areas with 2022 population** — see below |
 | `municipal/destinations/<category>/` | KML + Shapefile | **16 civic/service POI layers, 2,395 points** — see below |
 
 ## Coordinate System
 
-GTFS files are already WGS-84. `municipal/BUS_SPEED/` and `municipal/גבול העיר/` are read as ITM
+GTFS files are already WGS-84. `hazav/BUS_SPEED/` and `municipal/גבול העיר/` are read as ITM
 (EPSG:2039) shapefiles and converted via `backend/services/gis_loader.itm_to_wgs84` — BUS_SPEED
 segments are clipped against the city polygon in ITM space, so both must stay in ITM.
 
 Every other municipal layer is read from its **`export.kml`**, which is WGS-84 by definition and
 needs no conversion. `services/municipal_loader.py` deliberately never touches the ITM transformer. This is the safer of the two sources: the ~78 m
 offset bug documented in `gis_loader.py` is only reachable through the ITM path.
+
+`taltan/stations/` gets the same treatment by a different route: its geometry is ITM, but every
+record also carries `LONGITUDEN`/`LATITUDEN` — the same point in WGS-84 as integer micro-degrees —
+so `taltan_loader.py` divides by 1e6 and likewise never touches the transformer.
+
+**Folder names are never hardcoded.** `gis_loader._find_shapefile()` and
+`municipal_loader._find_layer_kml()` locate a layer by searching `data/**` for its ASCII shapefile
+stem (`BUS_SPEED`, `City Limits`, `Stations`, `Neighbourhoods`…). That is why moving BUS_SPEED from
+`municipal/` to `hazav/` needed no code change, and why the Hebrew-named folders survive macOS
+storing them in a different Unicode normalisation (NFD) than a literal written in a `.py` file (NFC).
 
 ## `municipal/` — Tel Aviv-Yafo municipal open data
 
@@ -42,25 +53,29 @@ and Hebrew attribute values were verified to round-trip cleanly (`גלילות`,
 
 71 official neighbourhood polygons keyed by `ms_shchuna`, with Hebrew names in `shem_shchuna`.
 
-These replace **both** of the previous approximations:
+**This layer defines the dashboard's neighbourhoods outright.** `municipal_loader.load_neighbourhood_config()`
+turns every polygon into one selectable entry — `id` is `ms-<ms_shchuna>` (the layer's own primary
+key, so no transliteration of Hebrew names is invented anywhere), `name` is `shem_shchuna`, and the
+`bbox` and `center` reported to the frontend are measured off the polygon (its bounds, and a
+guaranteed-interior representative point). Adding, renaming or dropping a neighbourhood means
+re-exporting this layer and re-running the pipeline; nothing is written down by hand.
 
-- the hand-drawn `bbox` rectangles in `neighbourhoods.json`, which were always noticeably larger than
-  the area they represented and in one case didn't overlap it at all; and
+It replaces **both** of the previous approximations:
+
+- the hand-maintained `neighbourhoods.json` config, a fixed subset of 19 areas with hand-drawn `bbox`
+  rectangles that were always noticeably larger than the area they represented, and in one case
+  didn't overlap it at all; and
 - the OpenStreetMap/Nominatim polygons that used to live in `neighbourhood_boundaries.json`.
 
 **The OSM dependency is gone**, and with it OSM's ODbL attribution requirement for boundary data.
 (The CartoDB basemap tiles are still OSM-derived, so the attribution note below still applies to
-those.) `neighbourhood_boundaries.json` has been deleted.
+those.) Both `neighbourhoods.json` and `neighbourhood_boundaries.json` have been deleted.
 
-The join is driven by the explicit `official_ms_shchuna` codes in `neighbourhoods.json` — never by
-fuzzy name matching. 14 of the 19 dashboard areas now resolve to an official polygon (up from 13
-under OSM; Jaffa is the gain). Two of them merge a pair of official polygons, because the municipal
-layer splits them north/south: `tzafon_yashan` = 30+31, `tzafon_hadash` = 33+35.
-
-The remaining 5 have an empty code list because no official municipal polygon exists for them —
-`merkaz` (city centre, not a gazetted neighbourhood), `rothschild` (a boulevard), `azrieli` (a retail
-complex), and the two intentionally-informal `*_border` zones outside the city limits. These still
-fall back to their `bbox` rectangle, exactly as before.
+Every entry therefore carries a real boundary, and stop-to-neighbourhood matching is always a
+point-in-polygon test — the bbox only pre-filters candidate stops. `build_boundaries()` still joins
+on explicit `ms_shchuna` codes rather than fuzzy names, and still accepts several codes per entry,
+which is what a caller would need to merge the neighbourhoods this layer splits north/south
+(e.g. 30+31, 33+35).
 
 ### `אזורים סטטיסטים/`
 
@@ -74,9 +89,10 @@ Population per neighbourhood is derived by **areal interpolation** in
 `services/municipal_loader.population_for()`: each statistical area contributes population in
 proportion to how much of it falls inside the neighbourhood polygon. This assumes uniform density
 within a single statistical area — the standard assumption, and a reasonable one here since CBS
-areas are drawn to be internally homogeneous and are small relative to a neighbourhood. Population is
-only computed where an official polygon exists; apportioning against a hand-drawn rectangle would
-produce a confident-looking number with nothing behind it.
+areas are drawn to be internally homogeneous and are small relative to a neighbourhood. 63 of the 71
+neighbourhoods come out with a population; the other 8 (the port, the fairgrounds, two parks, the
+university and adjacent employment/business zones) overlap no residential statistical area and
+report *absent* rather than zero.
 
 ### `destinations/`
 
@@ -108,25 +124,72 @@ Leaflet's attribution control (`attributionControl: false` in `app.js`) — befo
 public/production deployment, re-enable attribution or add equivalent credit; CartoDB's and OSM's
 usage terms require it.
 
+## `taltan/` — national transit survey
+
+**Source**: the תלת״ן survey export set (folders carry their `202605` vintage). Three layers ship;
+only `stations/` is read so far.
+
+### `stations/Stations.shp`
+
+33,661 surveyed stops nationwide. **This is the only ridership data in the project** — GTFS
+describes the timetable, not who boards — and it is what the stop layer and the stop panel are built
+from. Per station:
+
+| Columns | Meaning |
+|---|---|
+| `ONDAY`, `ON0406`…`ON2404` | Boardings per day, total and per time band |
+| `DEPDAY`, `DEP0406`…`DEP2404` | Scheduled calls per day, total and per band |
+| `ADULT`, `YOUTH`, `ELDERLY`, `STUDENT`, `DISABLED`, `OTHER` | Rider mix, in boardings/day |
+| `PERSTRANS` | Share of boardings that are transfers (% נסיעות מעבר) |
+| `TRIPTODEST` | Average number of trips taken to reach a destination |
+| `ROUTES` | How many routes serve the stop (not *which* — those come from GTFS) |
+| `ID_SEKER`, `CORRECTPHS`, `STREET`/`HOUSE`, `NBR_NAME` | Public stop code, name, address, neighbourhood |
+
+The time bands are parsed **out of the column names** (`ON0609` → `06-09`), not listed in code, so a
+survey edition that re-cuts them flows through without an edit.
+
+**Join key.** `ID_SEKER` is the public stop code (מק״ט) and is what matches GTFS `stops.stop_code`.
+`ID`/`STOP_ID` is an internal survey key whose numbering *collides* with public codes — station `ID`
+21482 is in בית גוברין, while the stop whose **code** is 21482 is הגדוד העברי/שד' הר ציון in Tel
+Aviv. Joining on `ID` would silently attach the wrong city's ridership to a Tel Aviv stop.
+
+**Not surveyed ≠ zero.** Of the 1,086 stations inside the city limits, 957 carry boardings; the rest
+were never surveyed and are stored as `null` end-to-end, drawn as a hollow ring and labelled
+"ללא נתוני סקר". They are never rendered as a zero, and they are excluded from the denominators.
+
+**Direction pairs are merged.** The survey stores one record per direction of travel, and a pair
+sits on identical coordinates under one code (e.g. code 17048, צומת חולון, `DIRECTION` + and −).
+`taltan_loader._merge_direction_pair()` collapses them — counts sum, while ratios (`PERSTRANS`,
+`TRIPTODEST`) are averaged **weighted by boardings**, since an unweighted mean would let a
+near-empty platform pull the figure as hard as a busy one. 1,086 records → 1,069 stops.
+
+**Rider shares are normalised against the reported segments,** whose sum is a few percent below
+`ONDAY` (246.1 vs 216.4 at code 21482). Dividing by `ONDAY` instead would quietly shave that gap off
+every station's mix.
+
+City totals as generated: **422,398 boardings/day** across 957 surveyed stops.
+
+### `NatazEX_shape_202605/` and `fcl_area_shape_202605/`
+
+Bus-lane segments (1,040 features: operating hours per weekday/Friday/Saturday, lane counts,
+permitted users) and terminal/depot sites (305 polygons: bays, parking, Rav-Kav machines, operator).
+Both are present and readable; **nothing in the pipeline consumes them yet.**
+
 ## Missing data — dashboard sections currently hidden
 
 The following dashboard sections were removed from the frontend (rather than shown with fabricated
 numbers) because nothing in this folder backs them. Add the corresponding file(s) below and re-run
 the pipeline to bring each one back:
 
-### 1. Station Analytics panel (per-stop boardings & demographics)
-The UI previously showed daily validations (תיקופים), stops served, and a passenger-demographic
-breakdown per bus stop — all from an empty, hardcoded `STATIONS = []` array. Needed:
-- A per-stop ridership file (e.g. `data/ridership/stations.csv`), keyed by **`stop_code`** — *not*
-  `stop_id`. In this feed `stop_id` is a feed-internal sequential key (1, 2, 3…) regenerated on every
-  GTFS revision, while `stop_code` is the stable national station number (מספר תחנה) that MOT/Rav-Kav
-  ridership is published against. Only 1 of 35,178 rows has `stop_id == stop_code`, so getting this
-  backwards joins almost nothing and fails silently as a panel of zeros. Note 35,178 stops share
-  34,099 distinct `stop_code`s (platforms/parent stations), so aggregate rather than assume 1:1.
-  With: daily validations count, daily boarding count, hourly boarding counts for
-  the buckets `04-06, 06-09, 09-12, 12-15, 15-19, 19-24, 24-04`, and a passenger-type breakdown
-  (adult / elder / youth / disabled / student / other), plus % of trips that are pass-through vs.
-  origin/destination at that stop.
+### 1. Station Analytics panel — RESTORED
+The UI previously showed daily boardings, stops served and a passenger-type breakdown per bus stop,
+all from an empty, hardcoded `STATIONS = []` array. Now backed by `taltan/stations/` (see above) and
+rendered by `apps/frontend/public/js/stops.js` as the stop layer plus the stop-detail panel.
+
+The survey turned out to carry exactly the buckets this section asked for
+(`04-06 … 24-04`), the rider types, and the transfer share — and the join is on `stop_code` as
+predicted: `stop_id` here is a feed-internal key regenerated on every GTFS revision, and only 1 of
+35,178 rows has `stop_id == stop_code`. 961 of the city's 1,069 stops match a GTFS line list.
 
 ### 2. Destination layer — RESTORED (as service destinations, not employment)
 The "מוקדי תעסוקה ומסחר" layer pointed at `D.dests`, which was never populated by any fetch. Now
@@ -136,8 +199,9 @@ backed by `municipal/destinations/` and rendered as **מוקדי שירות ות
 jobs, floor-area or business-registry data, so presenting them as employment data would repeat
 exactly the failure mode this section exists to prevent. The panel says what the data is.
 
-Still outstanding: **צירי יעד עיקריים** (desire lines). Drawing them needs an origin→destination
-flow, which requires the ridership data in §1 — the POI layer alone gives destinations but no trips.
+Still outstanding: **צירי יעד עיקריים** (desire lines). Drawing them needs origin→destination flows.
+The station survey added in §1 gives boardings *at* a stop and an average trip count to destination
+(`TRIPTODEST`), but no origin→destination pairs, so the desire lines still have nothing to draw.
 
 ### 3. "Bus vs. car" travel-time KPI — STILL MISSING
 The KPI card claiming a 2.6× / 39-vs-15-minute gap was a hardcoded string in `index.html` with no
