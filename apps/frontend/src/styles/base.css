@@ -1,0 +1,132 @@
+/* Reset, page shell, and the map surface. Anything reusable across components
+   lives in primitives.css; anything specific to one component lives beside it. */
+
+* { box-sizing: border-box; margin: 0; padding: 0 }
+
+/* Several blocks below set an explicit display, which would otherwise beat the
+   UA's [hidden] rule and leave them on screen. */
+[hidden] { display: none !important }
+
+html, body { height: 100% }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-head) }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important }
+}
+
+/* Figures line up column-to-column and don't jitter while the day animates. */
+.v, .u, .num, .pn, .pt, .ramp-ticks, .dest-count,
+.stop-tile-val, .chip, .band-val, .rider-pct, .stop-top-val,
+.spk .val, .spk .lab, .neigh-stat-val {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Shell ───────────────────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-columns: var(--side-w) 1fr;
+  grid-template-rows: var(--head-h) 1fr;
+  grid-template-areas: "head head" "side map";
+  height: 100vh;
+}
+
+aside {
+  grid-area: side;
+  background: var(--panel);
+  border-inline-end: 1px solid var(--line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0 20px;
+}
+
+aside::-webkit-scrollbar { width: 8px }
+aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px }
+
+#mapwrap {
+  grid-area: map;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#map {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--bg);
+}
+
+/* ── Leaflet chrome ──────────────────────────────────────────────────────── */
+.leaflet-container {
+  background: var(--bg);
+  font-family: var(--font-sans);
+  direction: ltr !important;
+}
+
+/* The dark basemap ships neutral grey. Tinting it toward the brand navy makes
+   the map read as part of the product, and pushes the grey back far enough that
+   the speed bands sit clearly in front of it. Applied to the base tiles only,
+   so the label layer above stays neutral and legible. */
+:root:not([data-theme="light"]) .basemap {
+  filter: brightness(1.55) sepia(.85) hue-rotate(179deg) saturate(2.4) brightness(.92);
+}
+
+/* Voyager's own colours are strong enough to argue with the speed bands, so the
+   basemap is held at low chroma: parks, water and built-up land stay readable
+   as context, and full saturation belongs to the data. */
+:root[data-theme="light"] .basemap {
+  filter: saturate(.5) brightness(1.04);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-tooltip {
+  background: var(--overlay);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.leaflet-popup-tip { background: var(--panel) }
+
+.leaflet-tooltip-top::before { border-top-color: var(--line) }
+.leaflet-tooltip-bottom::before { border-bottom-color: var(--line) }
+.leaflet-tooltip-left::before { border-left-color: var(--line) }
+.leaflet-tooltip-right::before { border-right-color: var(--line) }
+
+.pp { direction: rtl; line-height: 1.5 }
+.pp b { font-family: var(--font-num); color: var(--primary); font-size: 15px }
+
+.leaflet-bar a {
+  background-color: var(--panel) !important;
+  color: var(--ink) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.leaflet-bar a:hover { background-color: var(--panel2) !important; color: var(--primary) !important }
+
+/* ── Narrow screens ──────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  #app { grid-template-columns: 1fr; grid-template-areas: "head" "map" }
+  aside { display: none }
+}

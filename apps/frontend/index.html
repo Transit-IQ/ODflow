@@ -14,111 +14,20 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <!-- togeojson / shpjs / jszip are only needed for KML + zipped-Shapefile import.
-       They are ~600 KB combined, so app.js loads them on demand instead of on boot. -->
+       They are ~600 KB combined, so core/vendor.js loads them on demand. -->
 
-  <link rel="stylesheet" href="css/style.css">
+  <!-- Stamped before first paint so a light-theme session never flashes dark.
+       `data-theme` on <html> is the single source of truth for the palette;
+       core/theme.js reads the same key and owns it from here on. -->
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark'; }
+    catch { document.documentElement.dataset.theme = 'dark'; }
+  </script>
 </head>
-<body class="dark-theme">
-<div id="app">
-  <header>
-    <div class="brand">OD<span class="flow">flow</span></div>
-    <div class="sub">ניתוח פערי שירות בתח״צ &nbsp;·&nbsp; <b>תל אביב-יפו</b></div>
-
-    <div class="head-right">
-      <div class="tag" title="מקור הנתונים המוצגים כרגע"><span class="dot"></span>מהירויות אוטובוס · GTFS · סקר תחנות</div>
-      <button class="icon-btn" id="themeToggle" title="מעבר בין ערכת צבעים בהירה לכהה" aria-label="החלפת ערכת צבעים">
-        <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-12.37c-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06c.39-.38.39-1.02 0-1.41zm-12.37 12.37c-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06c.39-.38.39-1.02 0-1.41z"/></svg>
-        <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.3 22h-.1c-5.5 0-10-4.5-10-10 0-4.8 3.5-8.9 8.2-9.8.6-.1 1.2.3 1.3.9.1.6-.3 1.2-.9 1.3-3.7.8-6.4 4-6.4 7.8 0 4.4 3.6 8 8 8 3.8 0 7.1-2.7 7.8-6.4.1-.6.7-1 1.3-.9.6.1 1 .7.9 1.3-.9 4.7-5 8.2-9.8 8.2z"/></svg>
-      </button>
-    </div>
-  </header>
-
-  <aside>
-    <div class="block" style="--tint:var(--c-time)">
-      <h3>חתך זמן</h3>
-      <div class="days" id="days"></div>
-      <div class="periods" id="periods"></div>
-      <div class="allp on" id="allp">כל שעות היום (ממוצע)</div>
-      <div class="spark" id="spark"></div>
-      <div class="spark-cap">מהירות ממוצעת לפי חלון זמן · לחיצה מסננת</div>
-      <div class="playrow">
-        <button class="btn" id="play">▶ הרצת יום</button>
-        <button class="btn ghost" id="reset" title="איפוס כל הבחירות">איפוס</button>
-      </div>
-    </div>
-
-    <div class="block" style="--tint:var(--ramp)">
-      <h3>שכבות מפה</h3>
-      <div class="toggle on" data-layer="speed" style="--tint:var(--ramp)"><span class="sw"></span><span class="tl">רשת מהירויות אוטובוס</span></div>
-      <div class="toggle" data-layer="cong" style="--tint:var(--c-cong)"><span class="sw"></span><span class="tc" style="background:var(--sp1)"></span><span class="tl">מוקדי גודש (&lt;15 קמ״ש)</span></div>
-      <div class="toggle" data-layer="dest" style="--tint:var(--c-place)"><span class="sw"></span><span class="tc tc-multi"></span><span class="tl">מוקדי שירות ותעסוקה</span></div>
-      <div id="destCats" class="dest-cats" hidden></div>
-      <div class="toggle" data-layer="stops" style="--tint:var(--c-ride)"><span class="sw"></span><span class="tc" style="background:var(--primary)"></span><span class="tl">תחנות ועליות</span></div>
-      <div id="stopsLegend" class="legend" hidden></div>
-    </div>
-
-    <div class="block" style="--tint:var(--ramp)">
-      <h3>מקרא מהירות</h3>
-      <div class="ramp">
-        <div class="ramp-bar">
-          <span style="background:var(--sp1)" title="0–8 קמ״ש · גודש קשה"></span>
-          <span style="background:var(--sp2)" title="8–15 קמ״ש · גודש"></span>
-          <span style="background:var(--sp3)" title="15–22 קמ״ש · איטי"></span>
-          <span style="background:var(--sp4)" title="22–30 קמ״ש · זורם"></span>
-          <span style="background:var(--sp5)" title="30+ קמ״ש · מהיר / נתיב מהיר"></span>
-        </div>
-        <div class="ramp-ticks"><i>0</i><i>8</i><i>15</i><i>22</i><i>30</i><i>+</i></div>
-        <div class="ramp-note">קמ״ש · קו עבה = איטי יותר. סף הגודש בדוח הוא <b>15 קמ״ש</b>.</div>
-      </div>
-    </div>
-
-    <div class="block" style="--tint:var(--c-net)">
-      <h3>ייבוא שכבות</h3>
-      <label class="btn ghost import-btn">
-        + GeoJSON · KML · SHP(zip)
-        <input type="file" id="importFile" accept=".geojson,.json,.kml,.zip" multiple hidden>
-      </label>
-      <ul class="imported-list" id="importedList"></ul>
-    </div>
-  </aside>
-
-  <div id="mapwrap">
-    <div class="kpis">
-      <div class="kpi" style="--tint:var(--ramp)">
-        <div class="k">מהירות אוטובוס ממוצעת</div>
-        <div class="row"><span class="v" id="kAvg">—</span><span class="u">קמ״ש</span></div>
-        <div class="d" id="kAvgD">ממוצע כל היום</div>
-      </div>
-      <div class="kpi" style="--tint:var(--c-cong);--tone:var(--c-cong)">
-        <div class="k">מקטעים בגודש</div>
-        <div class="row"><span class="v" id="kCong">—</span><span class="u">% מהרשת</span></div>
-        <div class="d">מתחת ל־15 קמ״ש</div>
-      </div>
-      <div class="kpi" style="--tint:var(--c-net)">
-        <div class="k">מקטעי כביש בניתוח</div>
-        <div class="row"><span class="v" id="kSeg">—</span></div>
-        <div class="d" id="kSegD">ברחבי העיר</div>
-      </div>
-      <div class="kpi" style="--tint:var(--c-ride);--tone:var(--c-ride)">
-        <div class="k">עליות לאוטובוס ביום</div>
-        <div class="row"><span class="v" id="kBoard">—</span></div>
-        <div class="d" id="kBoardD">סקר תחנות</div>
-      </div>
-    </div>
-
-    <div id="map">
-      <div class="timebadge"><div class="now" id="nowLbl">—</div><div class="lbl" id="nowSub">בחר יום ושעה מהתפריט</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- Shared agency-label lookup -->
-<script src="js/agencies.js"></script>
-<!-- Application Logic script -->
-<script src="js/app.js"></script>
-<script src="js/neighbourhood.js"></script>
-<!-- Stop layer + stop-detail panel (survey ridership) -->
-<script src="js/stops.js"></script>
-
+<body>
+  <!-- The whole UI is mounted by src/main.js from the components in
+       src/components/. Nothing but the root node lives here. -->
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

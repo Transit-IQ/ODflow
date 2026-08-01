@@ -1,0 +1,63 @@
+/* Docked, not floating: the headline figures never cover the network they
+   describe. Each tile is capped by the colour of what it counts — the speed
+   tile by the whole band ramp — so the strip doubles as a legend for the map. */
+
+.kpis {
+  flex: 0 0 auto;
+  height: var(--kpi-h);
+  display: flex;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.kpi {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px 8px;
+  border-inline-start: 1px solid var(--line-soft);
+}
+
+.kpi::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background: var(--tint, var(--line));
+}
+
+.kpi:first-child { border-inline-start: 0 }
+
+.kpi .k {
+  font-size: 10.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi .row { display: flex; align-items: baseline; gap: 4px; margin-top: 1px }
+
+.kpi .v {
+  font-family: var(--font-num);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--tone, var(--ink));
+}
+
+.kpi .u { font-size: 11px; color: var(--ink2) }
+
+.kpi .d {
+  font-size: 10px;
+  color: var(--ink3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .kpis { height: auto; flex-wrap: wrap }
+  .kpi { flex: 1 1 50%; border-top: 1px solid var(--line-soft) }
+}

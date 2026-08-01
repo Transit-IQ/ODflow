@@ -2,13 +2,14 @@
 
 This folder contains all raw inputs consumed by `../apps/backend/scripts/build_dashboard_data.py`
 (the static-dashboard pipeline) and `../apps/backend/` (the interactive dev API). It is gitignored
-(besides this README and `gtfs/README.md`) — populate it locally per the instructions below.
+(besides this README) — populate it locally per the instructions below. This is the only README
+under `data/`; every source folder is documented in its own section here.
 
 ## Contents
 
 | Path | Format | Used for |
 |---|---|---|
-| `gtfs/agency.txt`, `routes.txt`, `trips.txt`, `stops.txt`, `shapes.txt`, `stop_times.txt` | GTFS text | Bus lines, stops, shapes, trip frequency (see `gtfs/README.md`) |
+| `gtfs/agency.txt`, `routes.txt`, `trips.txt`, `stops.txt`, `shapes.txt`, `stop_times.txt` | GTFS text | Bus lines, stops, shapes, trip frequency (see below) |
 | `hazav/BUS_SPEED/` | Shapefile (ITM) | Per-segment bus speed by day-of-week × time-of-day, fields `d_1_h_1`…`d_5_h_7` (35 values/segment, 713,943 segments) |
 | `municipal/גבול העיר/` | Shapefile (ITM) | Tel Aviv city-limits polygon, used to clip the speed segments |
 | `taltan/stations/` | Shapefile (ITM + WGS-84 columns) | **33,661 surveyed stops with boardings, calls and rider mix** — the only ridership source in the project, see below |
@@ -36,6 +37,34 @@ so `taltan_loader.py` divides by 1e6 and likewise never touches the transformer.
 stem (`BUS_SPEED`, `City Limits`, `Stations`, `Neighbourhoods`…). That is why moving BUS_SPEED from
 `municipal/` to `hazav/` needed no code change, and why the Hebrew-named folders survive macOS
 storing them in a different Unicode normalisation (NFD) than a literal written in a `.py` file (NFC).
+
+## `gtfs/` — Israel MOT GTFS feed
+
+Download the Israel Ministry of Transport GTFS feed and extract these `.txt` files directly into
+`data/gtfs/`. They are already WGS-84 and need no conversion.
+
+| File | Size | Description |
+|------|------|-------------|
+| `agency.txt` | ~3 KB | Transit operators (Dan, Egged, etc.) |
+| `routes.txt` | ~865 KB | All bus/rail route definitions |
+| `trips.txt` | ~16 MB | Trip → shape_id mappings |
+| `stops.txt` | ~4.8 MB | Stop locations (name, lat, lon) |
+| `shapes.txt` | ~211 MB | GPS traces for each route shape (**required**) |
+| `stop_times.txt` | ~458 MB | Stop sequences per trip (optional, needed for `/route/{id}/stops`) |
+
+GTFS describes the timetable, not ridership — boardings come from `taltan/stations/` (see below), and
+the two are joined on `stops.stop_code`, never on `stop_id`.
+
+After copying the files in, restart the backend so it re-indexes them:
+
+```bash
+cd apps/backend
+source venv/bin/activate
+uvicorn main:app --reload --port 8000
+```
+
+Indexing runs in the background; check progress at **http://127.0.0.1:8000/gtfs/status**. Once
+`ready: true`, all endpoints are live at **http://127.0.0.1:8000/docs**.
 
 ## `municipal/` — Tel Aviv-Yafo municipal open data
 
@@ -120,7 +149,7 @@ Output goes to `destinations.json` (~131 KB), fetched lazily the first time the 
 the same pattern as `neighbourhood_routes.json`, to keep initial page load small.
 
 **Attribution**: the CartoDB basemap tiles the app uses are OSM-derived. The current UI disables
-Leaflet's attribution control (`attributionControl: false` in `app.js`) — before any
+Leaflet's attribution control (`attributionControl: false` in `apps/frontend/src/core/map.js`) — before any
 public/production deployment, re-enable attribution or add equivalent credit; CartoDB's and OSM's
 usage terms require it.
 
@@ -184,7 +213,7 @@ the pipeline to bring each one back:
 ### 1. Station Analytics panel — RESTORED
 The UI previously showed daily boardings, stops served and a passenger-type breakdown per bus stop,
 all from an empty, hardcoded `STATIONS = []` array. Now backed by `taltan/stations/` (see above) and
-rendered by `apps/frontend/public/js/stops.js` as the stop layer plus the stop-detail panel.
+rendered by `apps/frontend/src/layers/stops.js` plus the `StopPanel` component.
 
 The survey turned out to carry exactly the buckets this section asked for
 (`04-06 … 24-04`), the rider types, and the transfer share — and the join is on `stop_code` as

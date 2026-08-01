@@ -22,7 +22,7 @@ apps/backend/scripts/build_dashboard_data.py
 apps/frontend/public/data/*.json         ← generated, static
         │  (fetched by the browser)
         ▼
-apps/frontend/public/js/*.js             ← renders the map/UI from that JSON
+apps/frontend/src/                       ← renders the map/UI from that JSON
 ```
 
 If you change anything under `../../data/`, re-run the pipeline before rebuilding/deploying:
@@ -33,14 +33,65 @@ source venv/bin/activate
 python scripts/build_dashboard_data.py
 ```
 
-## Project Structure
+## Project structure
 
-- `public/`: Contains the frontend assets:
-  - `css/`: Styling for the application.
-  - `js/`: Application logic (`app.js`), neighbourhood route browser (`neighbourhood.js`), stop layer + stop-detail panel (`stops.js`), shared agency labels (`agencies.js`).
-  - `data/`: Generated JSON consumed by the frontend (see below). Do not hand-edit — regenerate via the pipeline.
-- `index.html`: The main entry point of the dashboard.
-- `vite.config.js`: Configuration for the Vite bundler.
+The UI is built from ES modules — no framework. `index.html` is a shell with a
+single `<div id="app">`; everything else is mounted by `src/main.js`.
+
+```
+src/
+  main.js              composition root — the only file that knows about
+                       more than one component
+  core/                no DOM outside its own concern, no Leaflet except map.js
+    store.js           shared state + subscribe; the only way state changes
+    theme.js           owns data-theme on <html>; onTheme() for re-styling
+    palette.js         every colour the MAP draws with, both themes
+    map.js             the Leaflet map, basemap tiles and the pane stack
+    data.js            fetches + caches the generated JSON
+    geo.js             point-in-area tests
+    format.js          Hebrew labels, number formatting, escaping
+    agencies.js        agency id → Hebrew name
+    vendor.js          on-demand loader for the import parsers
+    dom.js             html`` and $() — the only two DOM helpers
+  layers/              draw on the map; never touch the DOM outside it
+    speed.js  boundary.js  destinations.js  routes.js  stops.js  imported.js
+  components/          one folder each: index.js + its own stylesheet
+    Header/  KpiBar/  TimeFilter/  LayerToggles/  SpeedLegend/
+    AreaPanel/  ImportPanel/  StopPanel/  TimeBadge/
+  styles/
+    tokens.css         design tokens for both themes (the CHROME palette)
+    base.css           reset, page shell, Leaflet chrome
+    primitives.css     pieces shared by several components (.block .btn .toggle …)
+public/data/           generated JSON — do not hand-edit, regenerate via the pipeline
+```
+
+### Component contract
+
+A component is a function returning `{ el, …methods }`. It owns its markup, its
+stylesheet and its own event listeners, and it reads or writes shared state
+through `core/store.js` — never through another component.
+
+```js
+import './KpiBar.css';
+import { html } from '../../core/dom.js';
+
+export function KpiBar() {
+  const el = html`<div class="kpis">…</div>`;
+  return { el, setSpeedStats(stats) { /* … */ } };
+}
+```
+
+`main.js` mounts them, subscribes to the store once, and is the single place
+that decides what a state change makes happen. To add a panel: create the
+folder, export the function, import it in `main.js`, append its `el`.
+
+### Where colour lives
+
+Two places, deliberately. `src/styles/tokens.css` holds the chrome palette
+(surfaces, ink, the domain tints on controls). `src/core/palette.js` holds every
+colour Leaflet needs in JavaScript — speed bands, route slots, destination
+families, the stop ramp. Each of those sets was validated *as a set* against the
+basemap it draws on, so changing one hex means re-checking the whole set.
 
 ### Generated data files (`public/data/`)
 

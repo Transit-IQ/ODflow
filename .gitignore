@@ -11,9 +11,6 @@ __pycache__/
 .pytest_cache/
 
 # Raw GTFS + shapefiles — large local-only inputs, see data/README.md
-# to populate this folder. Only the docs are tracked.
+# to populate this folder. Only that one README is tracked.
 /data/*
 !/data/README.md
-!/data/gtfs/
-/data/gtfs/*
-!/data/gtfs/README.md

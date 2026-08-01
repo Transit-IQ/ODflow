@@ -1,0 +1,116 @@
+/* Day pills */
+.days { display: flex; gap: 4px; margin-bottom: 8px }
+
+.day {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink2);
+  transition: border-color .12s, color .12s;
+}
+
+.day:hover { border-color: var(--primary); color: var(--ink) }
+.day.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary) }
+.day.avg { flex: 1.7; font-size: 11.5px }
+
+/* Time-of-day rows */
+.periods { display: flex; flex-direction: column; gap: 3px }
+
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.prow:hover { background: var(--panel2) }
+.prow.on { border-color: var(--primary); background: var(--panel2) }
+
+.prow .pn {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--ink3);
+  width: 20px;
+  font-weight: 600;
+}
+
+.prow.on .pn { color: var(--primary) }
+.prow .pl { font-size: 12.5px; flex: 1; color: var(--ink) }
+.prow .pt { font-size: 11px; color: var(--ink3) }
+
+.allp {
+  margin-top: 5px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink2);
+  padding: 6px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.allp:hover { border-color: var(--primary); color: var(--ink) }
+
+.allp.on {
+  border-style: solid;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--panel2);
+}
+
+/* Sparkline — average speed per time-of-day window, coloured by speed band */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 62px;
+  margin-top: 10px;
+}
+
+.spk {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+/* The bar's percentage height needs a parent of definite height, hence the
+   wrapper — .spk itself is content-sized inside a flex-end row. */
+.spk .bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.spk .bar {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: opacity .15s;
+  opacity: .62;
+}
+
+.spk:hover .bar, .spk.on .bar { opacity: 1 }
+.spk.on .bar { box-shadow: inset 0 0 0 1px var(--ink) }
+.spk .lab, .spk .val { font-family: var(--font-num); font-size: 9.5px; color: var(--ink3) }
+.spk.on .val { color: var(--ink); font-weight: 600 }
+
+.spark-cap { font-size: 10px; color: var(--ink3); margin-top: 6px }
+
+.playrow { display: flex; gap: 6px; margin-top: 10px }

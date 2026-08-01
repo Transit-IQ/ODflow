@@ -1,0 +1,56 @@
+.import-btn { width: 100%; justify-content: center; cursor: pointer; margin-bottom: 8px }
+
+.imported-list { list-style: none; display: flex; flex-direction: column; gap: 4px }
+
+.imported-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.imported-item .sw { cursor: pointer }
+.imported-item.on .sw { background: var(--secondary); border-color: var(--secondary) }
+.imported-item.on .sw::after { background: var(--panel); right: 16px }
+
+.imported-name {
+  font-size: 11.5px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+
+.imported-remove {
+  background: none;
+  border: none;
+  color: var(--ink3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.imported-remove:hover { color: var(--danger) }
+
+#mapwrap.drop-active::after {
+  content: "שחרר כאן קובץ GeoJSON / KML / SHP";
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(20, 184, 166, .1);
+  border: 2px dashed var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary);
+  pointer-events: none;
+}

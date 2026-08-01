@@ -1,0 +1,147 @@
+/* Anchored to #map, not #mapwrap — the KPI strip is a sibling of the map, and
+   the panel must never sit on top of the headline figures. */
+#stopPanel {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 900;
+  display: none;
+  width: 296px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--overlay);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow);
+}
+
+.stop-head { position: relative; margin-bottom: 10px }
+
+.stop-close {
+  position: absolute;
+  inset-inline-end: 0;
+  top: -2px;
+  background: none;
+  border: none;
+  color: var(--ink3);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.stop-close:hover { color: var(--ink) }
+
+.stop-title {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 14.5px;
+  padding-inline-end: 22px;
+  line-height: 1.3;
+}
+
+.stop-sub { font-size: 11px; color: var(--ink3); margin-top: 3px }
+
+.stop-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 }
+
+.stop-tile {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.stop-tile-val {
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.stop-tile-lbl { font-size: 10px; color: var(--ink3); margin-top: 1px }
+
+.stop-sec {
+  font-size: 10px;
+  color: var(--ink3);
+  margin: 13px 0 6px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.stop-chips { display: flex; flex-wrap: wrap; gap: 4px }
+
+.chip {
+  font-family: var(--font-num);
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+}
+
+.bands { display: flex; gap: 2px; align-items: flex-end }
+.band { flex: 1; text-align: center; cursor: default }
+.band-val { font-family: var(--font-num); font-size: 9.5px; color: var(--ink3); margin-bottom: 3px }
+.band-bar { border-radius: 3px 3px 0 0 }
+.band.peak .band-val { color: var(--ink); font-weight: 600 }
+.band-lbl { font-size: 8.5px; color: var(--ink3); margin-top: 4px; letter-spacing: -.3px }
+
+.riders { display: flex; flex-direction: column; gap: 4px }
+.rider { display: flex; align-items: center; gap: 7px; font-size: 11px }
+.rider-lbl { width: 52px; color: var(--ink2); text-align: start }
+.rider-track { flex: 1; height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden }
+.rider-fill { display: block; height: 100%; border-radius: 3px; background: var(--primary) }
+.rider-pct { width: 30px; text-align: end; font-family: var(--font-num); color: var(--ink2) }
+
+.stop-top { display: flex; flex-direction: column; gap: 3px }
+
+.stop-top-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: start;
+}
+
+.stop-top-row:hover { border-color: var(--primary) }
+.stop-top-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.stop-top-val { font-family: var(--font-num); color: var(--ink2); flex: 0 0 auto }
+
+.stop-empty {
+  font-size: 11px;
+  color: var(--ink2);
+  line-height: 1.6;
+  padding: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.stop-foot { margin-top: 12px }
+
+.stop-link {
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  color: var(--ink2);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.stop-link:hover { border-color: var(--primary); color: var(--ink) }
+.stop-src { font-size: 9.5px; color: var(--ink3); margin-top: 10px; text-align: center }
