@@ -22,7 +22,7 @@ from shapely.prepared import prep
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from services import gtfs_loader, gis_loader  # noqa: E402
+from services import gtfs_loader, gis_loader, municipal_loader  # noqa: E402
 from paths import DATA_DIR, FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
 
 # The Israeli MOT GTFS publishes a new route_id per timetable revision, so
@@ -93,15 +93,15 @@ def build_speed_kpis(speeds: list) -> dict:
     }
 
 
-def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict) -> dict:
+def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict, statistical_areas: list | None = None) -> dict:
     """
     For every configured neighbourhood, find routes with a stop inside its
     area and attach each route's best shape + stop list. Routes are
     deduplicated into a shared `routes` dict since many lines cross multiple
     neighbourhoods.
 
-    Where a real boundary polygon exists (see data/neighbourhood_boundaries.json
-    — fetched once from OpenStreetMap, not present for every entry), stops are
+    Where a real boundary polygon exists (the official municipal polygons in
+    data/municipal/neighbourhoods/ — not present for every entry), stops are
     matched with an actual point-in-polygon test instead of the coarse bbox,
     which is both a tighter/more accurate stop-matching rule and gives the
     frontend a real shape to draw instead of a rectangle.
@@ -128,6 +128,10 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
             poly_geom = shape(boundary_geom)
             min_lon, min_lat, max_lon, max_lat = poly_geom.bounds
             b = {"min_lat": min_lat, "max_lat": max_lat, "min_lon": min_lon, "max_lon": max_lon}
+            # The configured `center` was hand-entered alongside the bbox and has the
+            # same reliability problem, so derive it from the official polygon too.
+            centroid = poly_geom.representative_point()
+            center = [centroid.y, centroid.x]
             candidate_stops = stops_df[
                 (stops_df["stop_lat"] >= min_lat) & (stops_df["stop_lat"] <= max_lat) &
                 (stops_df["stop_lon"] >= min_lon) & (stops_df["stop_lon"] <= max_lon)
@@ -139,6 +143,7 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
             }
         else:
             b = n["bbox"]
+            center = n["center"]
             candidate_stops = stops_df[
                 (stops_df["stop_lat"] >= b["min_lat"]) & (stops_df["stop_lat"] <= b["max_lat"]) &
                 (stops_df["stop_lon"] >= b["min_lon"]) & (stops_df["stop_lon"] <= b["max_lon"])
@@ -188,9 +193,21 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
                 }
             n_route_ids.append(rid)
 
-        neighbourhoods_result.append({**n, "bbox": b, "boundary": boundary_geom, "route_ids": n_route_ids})
-        src = "real boundary" if boundary_geom else "bbox rectangle only"
-        print(f"  {n['name']}: {len(n_route_ids)} routes ({src})")
+        # Real resident counts, apportioned from the CBS statistical areas that
+        # overlap this neighbourhood. Only computed where an official polygon
+        # exists — apportioning against a hand-drawn rectangle would produce a
+        # confident-looking number with nothing behind it.
+        population = None
+        if statistical_areas and boundary_geom:
+            population = municipal_loader.population_for(poly_geom, statistical_areas)
+
+        neighbourhoods_result.append({
+            **n, "bbox": b, "center": center, "boundary": boundary_geom,
+            "population": population, "route_ids": n_route_ids,
+        })
+        src = "official boundary" if boundary_geom else "bbox rectangle only"
+        pop = f", {population['total']:,} residents" if population else ""
+        print(f"  {n['name']}: {len(n_route_ids)} routes ({src}{pop})")
 
     return {"neighbourhoods": neighbourhoods_result, "routes": routes_out}
 
@@ -202,14 +219,32 @@ def main():
     with open(DATA_DIR / "neighbourhoods.json", encoding="utf-8") as f:
         neighbourhoods_config = json.load(f)
 
-    boundaries_path = DATA_DIR / "neighbourhood_boundaries.json"
-    boundaries = {}
-    if boundaries_path.exists():
-        with open(boundaries_path, encoding="utf-8") as f:
-            boundaries = json.load(f)
-        print(f"=== Loaded {len(boundaries)} real neighbourhood boundaries (of {len(neighbourhoods_config)} configured) ===")
+    # Official municipal boundary polygons, keyed off the explicit
+    # `official_ms_shchuna` codes in data/neighbourhoods.json. This replaces the
+    # OpenStreetMap/Nominatim polygons that used to be read from
+    # data/neighbourhood_boundaries.json — the third-party dependency (and its
+    # attribution requirement) is gone. Entries with no official counterpart
+    # still fall back to their configured bbox, exactly as before.
+    boundaries = municipal_loader.build_boundaries(neighbourhoods_config)
+    if boundaries:
+        print(f"=== Loaded {len(boundaries)} official municipal boundaries (of {len(neighbourhoods_config)} configured) ===")
     else:
-        print("=== No data/neighbourhood_boundaries.json — all neighbourhoods will fall back to their bbox rectangle ===")
+        print("=== No data/municipal/neighbourhoods/export.kml — all neighbourhoods will fall back to their bbox rectangle ===")
+
+    destinations = municipal_loader.load_destinations()
+    if destinations["categories"]:
+        print(
+            f"=== Loaded {len(destinations['points'])} civic/service destinations "
+            f"across {len(destinations['categories'])} categories ==="
+        )
+    else:
+        print("=== No data/municipal/destinations/ — destinations layer will be empty ===")
+
+    statistical_areas = municipal_loader.load_statistical_areas()
+    if statistical_areas:
+        print(f"=== Loaded {len(statistical_areas)} populated CBS statistical areas ===")
+    else:
+        print("=== No data/municipal/אזורים סטטיסטים/export.kml — population will be omitted ===")
 
     print("=== Indexing trips by route (for shape/stop lookups) ===")
     trips_by_route = {rid: grp for rid, grp in idx["trips"].groupby("route_id")}
@@ -218,7 +253,10 @@ def main():
     write_json("border.json", gis["border"])
     write_json("speeds.json", gis["speeds"])
     write_json("kpis.json", build_speed_kpis(gis["speeds"]))
-    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries)
+    # Fetched lazily by the frontend the first time the destinations layer is toggled
+    # on, same pattern as neighbourhood_routes.json — keeps initial page load small.
+    write_json("destinations.json", destinations)
+    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries, statistical_areas)
     # Split into a small index (fetched eagerly for the dropdown) and a larger
     # shared routes lookup (fetched once, lazily, the first time a
     # neighbourhood is actually selected) — avoids loading several MB of
