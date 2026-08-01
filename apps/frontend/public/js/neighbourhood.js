@@ -8,19 +8,21 @@
  * Depends on: Leaflet `map` global (created by app.js)
  */
 
-// ── Color palette — 10 distinct, accessible colors ───────────────────────────
-const PALETTE = [
-  '#22d3ee', // cyan
-  '#a78bfa', // violet
-  '#34d399', // emerald
-  '#fb923c', // orange
-  '#f472b6', // pink
-  '#60a5fa', // blue
-  '#facc15', // yellow
-  '#4ade80', // green
-  '#f87171', // red
-  '#e879f9', // fuchsia
-];
+// ── Route colours ─────────────────────────────────────────────────────────────
+// Eight slots, assigned in fixed order and stepped per basemap — each set was
+// validated together (colourblind separation, contrast, distinct under normal
+// vision). Routes are stored by SLOT, not by hex, so a theme flip re-steps the
+// same route to the same slot instead of reshuffling the map's colours.
+// Past eight the slots repeat: the line-number badge in the list and the
+// hover tooltip carry the identity, colour only groups the strokes.
+const PALETTE = {
+  dark:  ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+};
+
+function routePalette() {
+  return document.body.classList.contains('light-theme') ? PALETTE.light : PALETTE.dark;
+}
 
 // ── Module state ──────────────────────────────────────────────────────────────
 const NS = {
@@ -29,18 +31,30 @@ const NS = {
   selectedNeigh: null,         // current neighbourhood object
   routesInNeigh: [],           // [{route_id, route_short_name, agency_id, route_long_name}]
   activeRoutes: new Map(),     // route_id → { polyline, color }
-  colorMap: new Map(),         // route_id → color (stable per session)
+  colorMap: new Map(),         // route_id → palette slot (stable per session)
   neighHighlight: null,        // Leaflet layer for the selected neighbourhood's outline
   routeGroup: L.layerGroup(),  // all active polylines
-  colorIdx: 0,                 // next color to assign
+  colorIdx: 0,                 // next slot to assign
 };
 
 function nextColor(routeId) {
   if (!NS.colorMap.has(routeId)) {
-    NS.colorMap.set(routeId, PALETTE[NS.colorIdx % PALETTE.length]);
+    NS.colorMap.set(routeId, NS.colorIdx % PALETTE.dark.length);
     NS.colorIdx++;
   }
-  return NS.colorMap.get(routeId);
+  return routePalette()[NS.colorMap.get(routeId)];
+}
+
+// Called from app.js when the basemap flips, so live routes re-step with it.
+function recolorRoutes() {
+  const casing = document.body.classList.contains('light-theme') ? '#ffffff' : '#0b1220';
+  NS.activeRoutes.forEach((entry, routeId) => {
+    const color = nextColor(routeId);
+    entry.color = color;
+    entry.polyline.setStyle({ color });
+    entry.casing.setStyle({ color: casing });
+  });
+  if (document.getElementById('neighLines')) renderRouteList();
 }
 
 function numFmt(n) { return (+n).toLocaleString('he-IL'); }
@@ -51,39 +65,41 @@ function injectSidebarBlock() {
   if (!aside) return;
 
   const html = `
-    <div class="block" id="neighBlock">
-      <h3>בחר שכונה — תל אביב</h3>
+    <div class="block" id="neighBlock" style="--tint:var(--c-place)">
+      <h3>אזור ניתוח</h3>
 
       <div class="neigh-select-wrap">
-        <select id="neighSelect" class="neigh-select">
-          <option value="">— בחר שכונה —</option>
+        <select id="neighSelect" class="neigh-select" aria-label="בחירת שכונה">
+          <option value="">כל העיר — ללא סינון</option>
         </select>
       </div>
 
-      <div id="neighRouteSection" style="display:none">
-        <h3>קווי אוטובוס בשכונה</h3>
+      <div id="neighRouteSection" hidden>
         <div class="neigh-header" id="neighHeader"></div>
+        <div class="neigh-stats" id="neighStats" hidden></div>
 
-        <div class="neigh-stats" id="neighStats" style="display:none"></div>
+        <h3 style="--tint:var(--c-net)">קווי אוטובוס באזור</h3>
 
-        <div style="display:flex;gap:6px;margin-bottom:8px">
-          <button class="btn ghost" id="neighSelectAll" style="flex:1;font-size:11px;padding:6px">בחר הכל</button>
-          <button class="btn ghost" id="neighClear"     style="flex:1;font-size:11px;padding:6px">נקה</button>
+        <div class="neigh-actions">
+          <button class="btn ghost" id="neighSelectAll">בחר הכל</button>
+          <button class="btn ghost" id="neighClear">נקה</button>
         </div>
 
-        <div id="neighLoading" style="display:none" class="neigh-loading">
-          <span class="neigh-spinner"></span> טוען קווים...
+        <div id="neighLoading" hidden class="neigh-loading">
+          <span class="neigh-spinner"></span> טוען קווים…
         </div>
 
         <div class="neigh-route-count" id="neighCount"></div>
-        <div class="lines-scroll" style="max-height:260px">
+        <div class="lines-scroll" style="max-height:240px">
           <ul class="lines" id="neighLines"></ul>
         </div>
       </div>
     </div>
   `;
 
-  aside.insertAdjacentHTML('beforeend', html);
+  // Picking the area is the first thing an analyst does, so this block sits at
+  // the top of the sidebar even though the module loads last.
+  aside.insertAdjacentHTML('afterbegin', html);
 
   injectStyles();
   bindControls();
@@ -93,50 +109,50 @@ function injectStyles() {
   const style = document.createElement('style');
   style.textContent = `
     .neigh-stats {
-      margin:8px 0; padding:8px; border-radius:8px;
+      margin:8px 0; padding:8px; border-radius:var(--radius-sm);
       border:1px solid var(--line); background:var(--panel2);
     }
     .neigh-stat-row { display:flex; gap:6px; text-align:center }
-    .neigh-stat { flex:1; display:flex; flex-direction:column; gap:2px }
-    .neigh-stat-val { font-size:15px; font-weight:700; color:var(--amber) }
-    .neigh-stat-lbl { font-size:10px; opacity:.75 }
-    .neigh-stat-src { margin-top:6px; font-size:9px; opacity:.55; text-align:center }
+    .neigh-stat { flex:1; display:flex; flex-direction:column; gap:1px }
+    .neigh-stat-val {
+      font-family:var(--font-num); font-size:15px; font-weight:600;
+      color:var(--c-place); font-variant-numeric:tabular-nums;
+    }
+    .neigh-stat-lbl { font-size:10px; color:var(--ink3) }
+    .neigh-stat-src { margin-top:6px; font-size:9.5px; color:var(--ink3); text-align:center }
 
     .neigh-select-wrap { margin-bottom:8px }
     .neigh-select {
-      width:100%; padding:8px 10px; border-radius:8px;
+      width:100%; padding:7px 9px; border-radius:var(--radius-sm);
       border:1px solid var(--line); background:var(--panel2);
-      color:var(--ink); font-size:13px; font-family:'Heebo',sans-serif;
-      cursor:pointer; transition:.15s;
+      color:var(--ink); font-size:12.5px; font-family:var(--font-sans);
+      cursor:pointer;
     }
-    .neigh-select:hover { border-color:#3a455e }
-    .neigh-select:focus { outline:none; border-color:var(--amber) }
+    .neigh-select:hover { border-color:var(--primary) }
     .neigh-header {
-      font-size:11px; color:var(--ink3); margin-bottom:8px;
+      font-size:11px; color:var(--ink2); margin-bottom:8px;
       padding:6px 8px; background:var(--panel2);
-      border:1px solid var(--line); border-radius:6px;
+      border:1px solid var(--line); border-radius:var(--radius-sm);
       line-height:1.5;
     }
+    .neigh-header b { color:var(--ink); font-weight:600 }
+    .neigh-actions { display:flex; gap:6px; margin-bottom:8px }
+    .neigh-actions .btn { flex:1; font-size:11px; padding:5px }
     .neigh-loading {
       display:flex; align-items:center; gap:8px;
       color:var(--ink2); font-size:12px; padding:8px 0;
     }
     .neigh-spinner {
-      display:inline-block; width:14px; height:14px;
-      border:2px solid var(--line); border-top-color:var(--amber);
+      display:inline-block; width:13px; height:13px;
+      border:2px solid var(--line); border-top-color:var(--primary);
       border-radius:50%; animation:spin .8s linear infinite;
     }
     @keyframes spin { to { transform:rotate(360deg) } }
-    .neigh-route-count {
-      font-size:11px; color:var(--ink3); margin-bottom:6px;
-      font-family:'IBM Plex Mono',monospace;
+    .neigh-route-count { font-size:10.5px; color:var(--ink3); margin-bottom:5px }
+    .neigh-color-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto }
+    .lines li.neigh-active {
+      background:var(--panel2); border-color:var(--line); color:var(--ink);
     }
-    .neigh-color-dot {
-      width:10px; height:10px; border-radius:50%;
-      flex:0 0 auto; transition:.2s;
-    }
-    .lines li.neigh-active { background:#1d212c }
-    .lines li.neigh-active .neigh-color-dot { box-shadow:0 0 6px currentColor }
   `;
   document.head.appendChild(style);
 }
@@ -194,7 +210,7 @@ async function onNeighSelect() {
   NS.routesInNeigh = [];
 
   if (!id) {
-    document.getElementById('neighRouteSection').style.display = 'none';
+    document.getElementById('neighRouteSection').hidden = true;
     removeNeighHighlight();
     // Back to city-wide KPIs when no neighbourhood is selected.
     if (typeof applyNeighbourhoodFilter === 'function') applyNeighbourhoodFilter(null, null);
@@ -205,8 +221,8 @@ async function onNeighSelect() {
   if (!neigh) return;
   NS.selectedNeigh = neigh;
 
-  document.getElementById('neighRouteSection').style.display = '';
-  document.getElementById('neighLoading').style.display = 'flex';
+  document.getElementById('neighRouteSection').hidden = false;
+  document.getElementById('neighLoading').hidden = false;
   document.getElementById('neighLines').innerHTML = '';
   document.getElementById('neighCount').textContent = '';
 
@@ -220,7 +236,7 @@ async function onNeighSelect() {
   // Scope the top KPI tiles (avg speed / % congested / segment count) to
   // this neighbourhood's real boundary (or its bbox, if no boundary exists).
   if (typeof applyNeighbourhoodFilter === 'function') {
-    applyNeighbourhoodFilter({ bbox: neigh.bbox, boundary: neigh.boundary }, neigh.name);
+    applyNeighbourhoodFilter({ bbox: neigh.bbox, boundary: neigh.boundary }, neigh.name, neigh);
   }
 
   // Look up routes from the pre-computed static index
@@ -231,16 +247,16 @@ async function onNeighSelect() {
       .filter(Boolean);
   } catch (e) {
     console.error('[Neighbourhood] Failed to load neighbourhood_routes.json:', e);
-    document.getElementById('neighLoading').style.display = 'none';
+    document.getElementById('neighLoading').hidden = true;
     document.getElementById('neighHeader').textContent = `שגיאה: ${e.message}`;
     return;
   }
 
-  document.getElementById('neighLoading').style.display = 'none';
+  document.getElementById('neighLoading').hidden = true;
 
   const count = NS.routesInNeigh.length;
   document.getElementById('neighHeader').innerHTML =
-    `<b>${neigh.name}</b> · <span style="color:var(--amber)">${numFmt(count)}</span> קווים פעילים ב-GTFS`;
+    `<b>${neigh.name}</b> · ${numFmt(count)} קווים פעילים ב-GTFS`;
 
   renderPopulation(neigh);
   document.getElementById('neighCount').textContent =
@@ -260,7 +276,7 @@ function renderPopulation(neigh) {
   const pop = neigh.population;
 
   if (!pop || !pop.total) {
-    el.style.display = 'none';
+    el.hidden = true;
     el.innerHTML = '';
     return;
   }
@@ -288,7 +304,7 @@ function renderPopulation(neigh) {
     </div>
     <div class="neigh-stat-src">מקור: אזורים סטטיסטיים למ״ס 2022, עיריית תל אביב-יפו</div>
   `;
-  el.style.display = 'block';
+  el.hidden = false;
 }
 
 // ── Render route list ─────────────────────────────────────────────────────────
@@ -304,10 +320,10 @@ function renderRouteList() {
     li.className = isActive ? 'neigh-active' : '';
     li.dataset.routeId = r.route_id;
     li.innerHTML = `
-      <span class="num" style="background:${color};color:#0a0d14">${r.route_short_name || '?'}</span>
+      <span class="num" style="background:${isActive ? color : `color-mix(in srgb, ${color} 20%, transparent)`};color:${isActive ? '#fff' : color}">${r.route_short_name || '?'}</span>
       <span class="desc" title="${r.route_long_name || ''}">${r.route_long_name || 'ללא תיאור'}</span>
       <span class="ag">${agencyLabel(r.agency_id)}</span>
-      <span class="neigh-color-dot" style="background:${color};color:${color}"></span>
+      ${isActive ? `<span class="neigh-color-dot" style="background:${color}"></span>` : ''}
     `;
 
     li.addEventListener('click', () => {
@@ -331,10 +347,22 @@ function activateRoute(r) {
 
   const color = nextColor(r.route_id);
 
+  // A casing in the basemap's own colour, laid down first. Without it a route
+  // stroke and a congested speed segment beneath it fuse into one line; the
+  // dark rim reads as "this belongs to a different layer".
+  const casing = L.polyline(r.coordinates, {
+    pane: 'routeCasingPane',
+    color: document.body.classList.contains('light-theme') ? '#ffffff' : '#0b1220',
+    weight: 8,
+    opacity: 0.85,
+    smoothFactor: 1.2,
+  });
+
   const polyline = L.polyline(r.coordinates, {
+    pane: 'routeLinePane',
     color,
-    weight: 5,
-    opacity: 0.88,
+    weight: 4.5,
+    opacity: 1,
     smoothFactor: 1.2,
   });
 
@@ -343,14 +371,16 @@ function activateRoute(r) {
     { sticky: true, direction: 'top' }
   );
 
+  casing.addTo(NS.routeGroup);
   polyline.addTo(NS.routeGroup);
-  NS.activeRoutes.set(r.route_id, { polyline, color });
+  NS.activeRoutes.set(r.route_id, { polyline, casing, color });
 }
 
 function deactivateRoute(routeId) {
   const entry = NS.activeRoutes.get(routeId);
   if (!entry) return;
   NS.routeGroup.removeLayer(entry.polyline);
+  NS.routeGroup.removeLayer(entry.casing);
   NS.activeRoutes.delete(routeId);
 }
 
@@ -373,9 +403,9 @@ function drawNeighHighlight(neigh) {
 
   const style = {
     pane: 'neighHighlightPane',
-    color: '#ff8a3d',
+    color: typeof palette === 'function' ? palette().focus : '#2dd4bf',
     weight: 1.5,
-    opacity: 0.65,
+    opacity: 0.7,
     fill: false,
     dashArray: '4 4',
   };
@@ -418,16 +448,17 @@ async function initNeighbourhood() {
     map.getPane('neighHighlightPane').style.zIndex = 350;
   }
 
+  // Every casing has to land below every route line, not just below its own —
+  // two panes guarantee that, where draw order within one group would not.
+  if (!map.getPane('routeCasingPane')) {
+    map.createPane('routeCasingPane').style.zIndex = 405;
+    map.createPane('routeLinePane').style.zIndex = 410;
+  }
+
   injectSidebarBlock();
   await loadNeighbourhoods();
-
-  // Default to the pilot neighbourhood so the map/route list aren't empty
-  // on first load.
-  const sel = document.getElementById('neighSelect');
-  if (sel.querySelector('option[value="hatikva"]')) {
-    sel.value = 'hatikva';
-    await onNeighSelect();
-  }
+  // Opens city-wide: the KPI tiles then describe the whole network, and picking
+  // an area from the select is the first deliberate narrowing.
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

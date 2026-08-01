@@ -9,9 +9,12 @@ only path on which the ~78 m datum-shift bug documented there is reachable.
 The source files are read directly; there are no pre-generated intermediates. Layers:
 
 ``neighbourhoods/export.kml``
-    71 official neighbourhood polygons keyed by ``ms_shchuna``. Replaces both the
-    hand-drawn ``bbox`` rectangles in ``data/neighbourhoods.json`` and the
-    OpenStreetMap/Nominatim polygons formerly in ``data/neighbourhood_boundaries.json``.
+    The official neighbourhood polygons, keyed by ``ms_shchuna``. This is the *only*
+    source of the neighbourhood list: which neighbourhoods exist, what they are called
+    and where their edges run all come from here. It replaces the hand-maintained
+    ``data/neighbourhoods.json`` config (a fixed subset with hand-drawn ``bbox``
+    rectangles and hand-entered centres) and the OpenStreetMap/Nominatim polygons
+    formerly in ``data/neighbourhood_boundaries.json``.
 
 ``אזורים סטטיסטים/export.kml``
     184 CBS statistical areas carrying 2022 population by age band.
@@ -180,15 +183,42 @@ def load_official_neighbourhoods() -> dict[int, dict]:
     return out
 
 
+def load_neighbourhood_config() -> list[dict]:
+    """
+    Derive the selectable-neighbourhood list from the municipal layer itself.
+
+    There is no curated list any more: every polygon the municipality publishes
+    becomes an entry, so the set of neighbourhoods, their names and their codes are
+    whatever ``neighbourhoods/export.kml`` currently says — re-exporting the layer is
+    the only thing needed to add, rename or drop one.
+
+    ``id`` is built from ``ms_shchuna``, the layer's own stable primary key, rather
+    than from a transliterated name: names are Hebrew, get re-spelled between exports,
+    and transliterating them would mean inventing a mapping that no source file backs.
+    Ordered by name so the frontend dropdown reads alphabetically (Hebrew sorts
+    correctly by code point).
+    """
+    official = load_official_neighbourhoods()
+    return [
+        {
+            "id": f"ms-{code}",
+            "name": official[code]["name"],
+            "official_ms_shchuna": [code],
+        }
+        for code in sorted(official, key=lambda c: (official[c]["name"], c))
+    ]
+
+
 def build_boundaries(neighbourhoods_config: list) -> dict[str, dict]:
     """
     Build the ``{neighbourhood id: GeoJSON geometry}`` mapping that
-    ``build_dashboard_data.build_neighbourhoods`` already knows how to consume.
+    ``build_dashboard_data.build_neighbourhoods`` consumes.
 
-    Driven by the explicit ``official_ms_shchuna`` codes in
-    ``data/neighbourhoods.json`` — never by fuzzy name matching. An entry with an
-    empty list has no official municipal counterpart (a boulevard, a retail complex,
-    a zone outside the city limits) and keeps falling back to its configured bbox.
+    Driven by the explicit ``official_ms_shchuna`` codes on each config entry — never
+    by fuzzy name matching. Entries produced by :func:`load_neighbourhood_config` carry
+    exactly one code each; the multi-code path stays because the layer splits some
+    neighbourhoods into several polygons, and a caller merging them into one entry is
+    a legitimate use of this function.
     """
     official = load_official_neighbourhoods()
     boundaries: dict[str, dict] = {}
@@ -210,7 +240,7 @@ def build_boundaries(neighbourhoods_config: list) -> dict[str, dict]:
 
     if missing:
         raise SystemExit(
-            "data/neighbourhoods.json references ms_shchuna codes absent from "
+            "neighbourhood config references ms_shchuna codes absent from "
             f"{NEIGHBOURHOODS_KML}: {', '.join(missing)}"
         )
     return boundaries

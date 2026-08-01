@@ -22,8 +22,8 @@ from shapely.prepared import prep
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from services import gtfs_loader, gis_loader, municipal_loader  # noqa: E402
-from paths import DATA_DIR, FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
+from services import gtfs_loader, gis_loader, municipal_loader, taltan_loader  # noqa: E402
+from paths import FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
 
 # The Israeli MOT GTFS publishes a new route_id per timetable revision, so
 # the "same" real-world line shows up as many route_long_name values that
@@ -65,10 +65,10 @@ def write_json(name: str, obj) -> None:
     print(f"  wrote {path.relative_to(ROOT)} ({path.stat().st_size / 1024:.1f} KB)")
 
 
-def build_speed_kpis(speeds: list) -> dict:
+def build_speed_kpis(speeds: list, stops_data: dict | None = None) -> dict:
     """
-    Derive dashboard KPIs directly from the clipped speed segments —
-    nothing here is a hardcoded/mocked number.
+    Derive dashboard KPIs directly from the clipped speed segments and the station
+    survey — nothing here is a hardcoded/mocked number.
     """
     profile_sum = [0.0] * 7
     profile_n = [0] * 7
@@ -86,25 +86,94 @@ def build_speed_kpis(speeds: list) -> dict:
         for h in range(7)
     ]
 
-    return {
+    kpis = {
         "segment_count": len(speeds),
         # Average speed per time-of-day period (P1..P7), across all days/segments.
         "speed_profile": speed_profile,
     }
 
+    # City-wide ridership headline. Shipped in kpis.json (fetched on page load) rather
+    # than only in stops.json (fetched lazily on first toggle) so the tile has a real
+    # number before anyone opens the stop layer.
+    if stops_data:
+        kpis["stops"] = {
+            **stops_data["totals"],
+            "bands": stops_data["bands"],
+            "rider_types": stops_data["rider_types"],
+            "source": stops_data["source"],
+        }
 
-def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict, statistical_areas: list | None = None) -> dict:
+    return kpis
+
+
+def _route_sort_key(name: str):
+    """Line 5 before line 289 before line 'א' — numeric where the name is numeric."""
+    name = (name or "").strip()
+    return (0, int(name), "") if name.isdigit() else (1, 0, name)
+
+
+def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
     """
-    For every configured neighbourhood, find routes with a stop inside its
-    area and attach each route's best shape + stop list. Routes are
-    deduplicated into a shared `routes` dict since many lines cross multiple
-    neighbourhoods.
+    Survey stations inside the city, each joined to the bus lines that actually call
+    there and to the neighbourhood it stands in.
 
-    Where a real boundary polygon exists (the official municipal polygons in
-    data/municipal/neighbourhoods/ — not present for every entry), stops are
-    matched with an actual point-in-polygon test instead of the coarse bbox,
-    which is both a tighter/more accurate stop-matching rule and gives the
-    frontend a real shape to draw instead of a rectangle.
+    The survey publishes how many routes serve a station (``ROUTES``) but not *which*,
+    so the line numbers come from GTFS, matched on the public stop code the two
+    sources share. Both figures are kept: a disagreement between "the survey counted
+    3" and "GTFS lists 2 today" is real information about how current each source is,
+    and silently dropping one would hide it.
+    """
+    data = taltan_loader.load_stations(city_polygon)
+    stops_df = idx["stops"]
+    routes_df = idx["routes"]
+    stop_routes = idx["stop_routes"]
+
+    short_by_route = dict(zip(routes_df["route_id"], routes_df.get("route_short_name", "")))
+    routes_by_code: dict[str, set] = {}
+    for stop_id, code in stops_df["stop_code"].items():
+        code = str(code).strip()
+        if not code:
+            continue
+        for rid in stop_routes.get(stop_id, frozenset()):
+            short = (short_by_route.get(rid) or "").strip()
+            if short:
+                routes_by_code.setdefault(code, set()).add(short)
+
+    prepared = {nid: prep(shape(geom)) for nid, geom in boundaries.items()}
+
+    matched = 0
+    for station in data["stations"]:
+        lines = sorted(routes_by_code.get(station["code"], ()), key=_route_sort_key)
+        station["routes"] = lines
+        if lines:
+            matched += 1
+        point = Point(station["lon"], station["lat"])
+        station["neighbourhood"] = next(
+            (nid for nid, poly in prepared.items() if poly.contains(point)), None
+        )
+
+    data["totals"] = taltan_loader.summarise(
+        data["stations"], len(data["bands"]), len(data["rider_types"])
+    )
+    print(
+        f"  {data['totals']['count']} stations in the city, "
+        f"{data['totals']['surveyed']} with survey data, "
+        f"{matched} matched to GTFS lines, "
+        f"{data['totals']['boardings_day']:,.0f} boardings/day"
+    )
+    return data
+
+
+def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict, statistical_areas: list | None = None, stops_data: dict | None = None) -> dict:
+    """
+    For every neighbourhood, find routes with a stop inside its area and attach
+    each route's best shape + stop list. Routes are deduplicated into a shared
+    `routes` dict since many lines cross multiple neighbourhoods.
+
+    Every entry comes from an official municipal polygon in
+    data/municipal/neighbourhoods/, so stop matching is always a real
+    point-in-polygon test (the bbox is only a pre-filter for candidate stops),
+    and the bbox/centre reported to the frontend are measured off that polygon.
     """
     stops_df = idx["stops"]
     routes_df = idx["routes"]
@@ -118,40 +187,31 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
 
     for n in neighbourhoods_config:
         boundary_geom = boundaries.get(n["id"])
+        if not boundary_geom:
+            # Can only happen if the layer changed under us between the config
+            # being derived and the boundaries being built.
+            raise RuntimeError(f"no official boundary for neighbourhood {n['id']}")
 
-        if boundary_geom:
-            # The hand-entered config bbox turned out to be unreliable for a
-            # couple of these (one didn't even overlap the real neighbourhood
-            # at all) — once a real boundary is known, use ITS bounds for the
-            # candidate-stop pre-filter, and correct the reported bbox to
-            # match, rather than trusting the stale config value.
-            poly_geom = shape(boundary_geom)
-            min_lon, min_lat, max_lon, max_lat = poly_geom.bounds
-            b = {"min_lat": min_lat, "max_lat": max_lat, "min_lon": min_lon, "max_lon": max_lon}
-            # The configured `center` was hand-entered alongside the bbox and has the
-            # same reliability problem, so derive it from the official polygon too.
-            centroid = poly_geom.representative_point()
-            center = [centroid.y, centroid.x]
-            candidate_stops = stops_df[
-                (stops_df["stop_lat"] >= min_lat) & (stops_df["stop_lat"] <= max_lat) &
-                (stops_df["stop_lon"] >= min_lon) & (stops_df["stop_lon"] <= max_lon)
-            ]
-            polygon = prep(poly_geom)
-            bbox_stop_ids = {
-                sid for sid, row in candidate_stops.iterrows()
-                if polygon.contains(Point(row["stop_lon"], row["stop_lat"]))
-            }
-        else:
-            b = n["bbox"]
-            center = n["center"]
-            candidate_stops = stops_df[
-                (stops_df["stop_lat"] >= b["min_lat"]) & (stops_df["stop_lat"] <= b["max_lat"]) &
-                (stops_df["stop_lon"] >= b["min_lon"]) & (stops_df["stop_lon"] <= b["max_lon"])
-            ]
-            bbox_stop_ids = set(candidate_stops.index.astype(str))
+        # bbox and centre are measured off the official polygon: the bbox is the
+        # polygon's own bounds (used as the cheap candidate-stop pre-filter, and
+        # as the frontend's zoom target), the centre a guaranteed-interior point.
+        poly_geom = shape(boundary_geom)
+        min_lon, min_lat, max_lon, max_lat = poly_geom.bounds
+        b = {"min_lat": min_lat, "max_lat": max_lat, "min_lon": min_lon, "max_lon": max_lon}
+        centroid = poly_geom.representative_point()
+        center = [centroid.y, centroid.x]
+        candidate_stops = stops_df[
+            (stops_df["stop_lat"] >= min_lat) & (stops_df["stop_lat"] <= max_lat) &
+            (stops_df["stop_lon"] >= min_lon) & (stops_df["stop_lon"] <= max_lon)
+        ]
+        polygon = prep(poly_geom)
+        inside_stop_ids = {
+            sid for sid, row in candidate_stops.iterrows()
+            if polygon.contains(Point(row["stop_lon"], row["stop_lat"]))
+        }
 
         route_ids = set()
-        for sid in bbox_stop_ids:
+        for sid in inside_stop_ids:
             route_ids.update(stop_routes.get(sid, frozenset()))
 
         keep_cols = [c for c in ["route_id", "route_short_name", "agency_id", "route_long_name"] if c in routes_df.columns]
@@ -194,20 +254,31 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
             n_route_ids.append(rid)
 
         # Real resident counts, apportioned from the CBS statistical areas that
-        # overlap this neighbourhood. Only computed where an official polygon
-        # exists — apportioning against a hand-drawn rectangle would produce a
-        # confident-looking number with nothing behind it.
+        # overlap this neighbourhood's polygon. Stays None where the area carries
+        # no residents at all (a port, an interchange, an industrial zone), so the
+        # frontend can tell "no data" from "nobody lives here".
         population = None
-        if statistical_areas and boundary_geom:
+        if statistical_areas:
             population = municipal_loader.population_for(poly_geom, statistical_areas)
+
+        # Ridership for the stations standing in this neighbourhood, summed from the
+        # same station records the map draws — no second, separately-derived figure
+        # that could disagree with the stop layer.
+        transit = None
+        if stops_data:
+            mine = [s for s in stops_data["stations"] if s.get("neighbourhood") == n["id"]]
+            if mine:
+                transit = taltan_loader.summarise(
+                    mine, len(stops_data["bands"]), len(stops_data["rider_types"])
+                )
 
         neighbourhoods_result.append({
             **n, "bbox": b, "center": center, "boundary": boundary_geom,
-            "population": population, "route_ids": n_route_ids,
+            "population": population, "route_ids": n_route_ids, "transit": transit,
         })
-        src = "official boundary" if boundary_geom else "bbox rectangle only"
         pop = f", {population['total']:,} residents" if population else ""
-        print(f"  {n['name']}: {len(n_route_ids)} routes ({src}{pop})")
+        ride = f", {transit['boardings_day']:,.0f} boardings/day" if transit else ""
+        print(f"  {n['name']}: {len(n_route_ids)} routes{pop}{ride}")
 
     return {"neighbourhoods": neighbourhoods_result, "routes": routes_out}
 
@@ -216,20 +287,22 @@ def main():
     idx = build_gtfs_index()
     gis = build_gis_index()
 
-    with open(DATA_DIR / "neighbourhoods.json", encoding="utf-8") as f:
-        neighbourhoods_config = json.load(f)
-
-    # Official municipal boundary polygons, keyed off the explicit
-    # `official_ms_shchuna` codes in data/neighbourhoods.json. This replaces the
-    # OpenStreetMap/Nominatim polygons that used to be read from
-    # data/neighbourhood_boundaries.json — the third-party dependency (and its
-    # attribution requirement) is gone. Entries with no official counterpart
-    # still fall back to their configured bbox, exactly as before.
+    # The neighbourhood list itself is read out of the municipal layer in
+    # data/municipal/neighbourhoods/ — which neighbourhoods exist, their names,
+    # their codes and their boundaries all come from that one export. There is no
+    # curated data/neighbourhoods.json config any more, and nothing about a
+    # neighbourhood is written down in this repo by hand.
+    neighbourhoods_config = municipal_loader.load_neighbourhood_config()
+    if not neighbourhoods_config:
+        raise SystemExit(
+            "No neighbourhoods found — expected an official polygon layer at "
+            f"{municipal_loader.NEIGHBOURHOODS_KML or 'data/municipal/neighbourhoods/export.kml'}"
+        )
     boundaries = municipal_loader.build_boundaries(neighbourhoods_config)
-    if boundaries:
-        print(f"=== Loaded {len(boundaries)} official municipal boundaries (of {len(neighbourhoods_config)} configured) ===")
-    else:
-        print("=== No data/municipal/neighbourhoods/export.kml — all neighbourhoods will fall back to their bbox rectangle ===")
+    print(
+        f"=== Loaded {len(neighbourhoods_config)} official municipal neighbourhoods "
+        f"from {municipal_loader.NEIGHBOURHOODS_KML.relative_to(ROOT)} ==="
+    )
 
     destinations = municipal_loader.load_destinations()
     if destinations["categories"]:
@@ -246,17 +319,21 @@ def main():
     else:
         print("=== No data/municipal/אזורים סטטיסטים/export.kml — population will be omitted ===")
 
+    print("=== Building stop layer from the תלת״ן station survey ===")
+    stops_data = build_stops(idx, shape(gis["border"]["geometry"]), boundaries)
+
     print("=== Indexing trips by route (for shape/stop lookups) ===")
     trips_by_route = {rid: grp for rid, grp in idx["trips"].groupby("route_id")}
 
     print("=== Writing static JSON for frontend ===")
     write_json("border.json", gis["border"])
     write_json("speeds.json", gis["speeds"])
-    write_json("kpis.json", build_speed_kpis(gis["speeds"]))
+    write_json("kpis.json", build_speed_kpis(gis["speeds"], stops_data))
     # Fetched lazily by the frontend the first time the destinations layer is toggled
     # on, same pattern as neighbourhood_routes.json — keeps initial page load small.
     write_json("destinations.json", destinations)
-    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries, statistical_areas)
+    write_json("stops.json", stops_data)
+    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries, statistical_areas, stops_data)
     # Split into a small index (fetched eagerly for the dropdown) and a larger
     # shared routes lookup (fetched once, lazily, the first time a
     # neighbourhood is actually selected) — avoids loading several MB of

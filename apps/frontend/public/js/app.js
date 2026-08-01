@@ -11,7 +11,7 @@ const DAYAB = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳'];
 let state = {
   day: 'avg',
   period: 'all',
-  layers: { speed: true, cong: false, dest: false },
+  layers: { speed: true, cong: false, dest: false, stops: false },
   destCats: null, // Set of enabled destination category ids, null = all
   areaFilter: null // { bbox, boundary } of the selected neighbourhood, or null for city-wide
 };
@@ -23,27 +23,54 @@ let D = {
   speedProfile: null // filled from data/kpis.json — average speed per period, P1..P7
 };
 
-// ---- Dynamic Color Scales (Theme Aware) ----
+// ---- Speed bands (theme aware) ----
+// Five bands, cut at 8 / 15 / 22 / 30 km/h. The 15 edge is deliberate: it is the
+// same threshold the "% congested" KPI reports, so a segment the tile counts as
+// congested is exactly a segment drawn in one of the first two colours.
+//
+// Each set was validated together against its basemap (colourblind separation,
+// ≥3:1 contrast, distinct under normal vision). Hue alone doesn't carry the
+// band — line WEIGHT is the redundant encoding: slower reads thicker.
+const SPEED_BREAKS = [8, 15, 22, 30];
+const SPEED_WEIGHT = [5, 4, 3.25, 2.75, 2.5];
+
 const themeColors = {
   dark: {
-    s1: '#7a0c2e', s2: '#c0142d', s3: '#e8472b', s4: '#f59e0b', s5: '#facc15', s6: '#4ade80', s7: '#22d3ee', line: '#2b3346'
+    bands: ['#e11d48', '#f97316', '#facc15', '#34d399', '#60a5fa'],
+    empty: '#3d4a63',      // segment with no speed reading for the current cut
+    cong: '#fb7185',       // congestion-hotspot halo
+    focus: '#2dd4bf',      // brand teal — selection outlines, never map data
+    imported: '#38bdf8',
   },
   light: {
-    s1: '#991b1b', s2: '#dc2626', s3: '#ef4444', s4: '#f97316', s5: '#d97706', s6: '#16a34a', s7: '#2563eb', line: '#cbd5e1'
+    bands: ['#e11d48', '#9a3412', '#ca8a04', '#15803d', '#1d4ed8'],
+    empty: '#cbd5e1',
+    cong: '#be123c',
+    focus: '#0f766e',
+    imported: '#1d4ed8',
   }
 };
 
+function palette() {
+  return document.body.classList.contains('light-theme') ? themeColors.light : themeColors.dark;
+}
+
+function speedBand(v) {
+  if (v == null || v <= 0) return -1;
+  let i = 0;
+  while (i < SPEED_BREAKS.length && v >= SPEED_BREAKS[i]) i++;
+  return i;
+}
+
 function col(v) {
-  const isLight = document.body.classList.contains('light-theme');
-  const colors = isLight ? themeColors.light : themeColors.dark;
-  if (v == null || v <= 0) return colors.line;
-  if (v < 8) return colors.s1;
-  if (v < 12) return colors.s2;
-  if (v < 16) return colors.s3;
-  if (v < 22) return colors.s4;
-  if (v < 30) return colors.s5;
-  if (v < 45) return colors.s6;
-  return colors.s7;
+  const p = palette();
+  const b = speedBand(v);
+  return b < 0 ? p.empty : p.bands[b];
+}
+
+function weightFor(v) {
+  const b = speedBand(v);
+  return b < 0 ? 2 : SPEED_WEIGHT[b];
 }
 
 // Each segment carries a flat 35-value array: 5 days (d_1..d_5) x 7 periods (h_1..h_7).
@@ -116,8 +143,9 @@ function computeAreaMembership() {
 }
 
 // Called by neighbourhood.js when the selected neighbourhood changes.
-// label is the Hebrew name shown in the KPI caption, or null for city-wide.
-function applyNeighbourhoodFilter(area, label) {
+// label is the Hebrew name shown in the KPI caption, or null for city-wide;
+// neigh is the full record (carrying its population/transit blocks), or null.
+function applyNeighbourhoodFilter(area, label, neigh = null) {
   state.areaFilter = area;
   computeAreaMembership();
   const kSegD = document.getElementById('kSegD');
@@ -125,17 +153,24 @@ function applyNeighbourhoodFilter(area, label) {
   recolor();
   // Destinations honour the same area filter as the speed segments.
   if (state.layers.dest) renderDestinations();
+  // Stops do too, and their KPI tile switches to the selected neighbourhood's
+  // own ridership figures. `neigh` is null for city-wide.
+  if (typeof refreshStops === 'function') refreshStops(neigh);
 }
 
 // ---- Map Setup ----
+// Light mode uses Voyager rather than the flat grey Positron: it carries parks,
+// water and built-up land in soft colour, which is context a transit planner
+// actually reads off the map. Dark mode keeps the neutral dark base and is
+// tinted to the brand navy in CSS (see .basemap).
 const tiles = {
   dark: {
     base: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     labels: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
   },
   light: {
-    base: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    labels: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png'
+    base: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+    labels: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png'
   }
 };
 
@@ -147,11 +182,17 @@ if (initialTheme === 'light') {
 
 const map = L.map('map', { zoomControl: false, attributionControl: false, preferCanvas: true })
   .setView(D.center, 15);
-L.control.zoom({ position: 'topleft' }).addTo(map);
+// Top-right keeps the map's left edge clear for the stop-detail panel and its
+// bottom-left for the time badge.
+L.control.zoom({ position: 'topright' }).addTo(map);
 
 const activeMapTheme = initialTheme === 'light' ? 'light' : 'dark';
-let baseTileLayer = L.tileLayer(tiles[activeMapTheme].base, { maxZoom: 19, subdomains: 'abcd' }).addTo(map);
+let baseTileLayer = L.tileLayer(tiles[activeMapTheme].base, { maxZoom: 19, subdomains: 'abcd', className: 'basemap' }).addTo(map);
 let labelTileLayer = L.tileLayer(tiles[activeMapTheme].labels, { maxZoom: 19, subdomains: 'abcd', opacity: initialTheme === 'light' ? 0.8 : 0.7 }).addTo(map);
+
+// Point layers ride above every line layer (speed segments at 400, route casings
+// and strokes at 405/410) — a corridor must never hide the stop that explains it.
+map.createPane('pointPane').style.zIndex = 420;
 
 const speedLayer = L.layerGroup().addTo(map);
 const congLayer = L.layerGroup();
@@ -166,10 +207,10 @@ function drawNeighborhoodBorder(geoJson) {
   if (geoJson) {
     L.geoJSON(geoJson, {
       style: {
-        color: '#ff8a3d',
-        weight: 3,
-        opacity: 0.8,
-        fillOpacity: 0.02,
+        color: palette().focus,
+        weight: 2,
+        opacity: 0.75,
+        fill: false,
         dashArray: '6 4'
       }
     }).addTo(borderLayer);
@@ -181,15 +222,14 @@ const polys = [];
 function buildSpeed() {
   speedLayer.clearLayers();
   polys.length = 0;
-  const isLight = document.body.classList.contains('light-theme');
-  const colors = isLight ? themeColors.light : themeColors.dark;
+  const p = palette();
 
   D.segments.forEach(s => {
     const latlngs = s.coordinates;
-    const pl = L.polyline(latlngs, { color: colors.line, weight: 3, opacity: .9 });
+    const pl = L.polyline(latlngs, { color: p.empty, weight: 3, opacity: .9 });
     pl._speeds = s.speeds; // 35 metrics array
 
-    pl.on('mouseover', function () { this.setStyle({ weight: 6 }) });
+    pl.on('mouseover', function () { this.setStyle({ weight: (this._w || 3) + 3 }) });
     pl.on('mouseout', function () { this.setStyle({ weight: this._w || 3 }) });
     pl.on('click', function () {
       const v = segSpeed(this._speeds);
@@ -213,20 +253,18 @@ function recolor() {
   let sum = 0, n = 0, below = 0, tot = 0;
   congLayer.clearLayers();
 
-  const isLight = document.body.classList.contains('light-theme');
-  const emptyColor = isLight ? '#cbd5e1' : '#222a3a';
+  const p = palette();
 
   polys.forEach(pl => {
     const v = segSpeed(pl._speeds);
     const inArea = !areaMembership || areaMembership.has(pl);
 
-    const c = v == null ? emptyColor : col(v);
-    let w = v == null ? 3 : v < 16 ? 4 : 3;
+    const w = weightFor(v);
     pl._w = w;
 
     // Segments are always drawn for full-city context — only the KPI totals
     // below are scoped to the selected neighbourhood.
-    pl.setStyle({ color: c, opacity: 0.9, weight: w });
+    pl.setStyle({ color: col(v), opacity: v == null ? 0.5 : 0.9, weight: w });
 
     if (v != null && inArea) {
       sum += v;
@@ -234,7 +272,7 @@ function recolor() {
       tot++;
       if (v < 15) {
         below++;
-        const cl = L.polyline(pl.getLatLngs(), { color: '#ff2d55', weight: 6, opacity: .85 });
+        const cl = L.polyline(pl.getLatLngs(), { color: p.cong, weight: 8, opacity: .35 });
         congLayer.addLayer(cl);
       }
     }
@@ -307,7 +345,17 @@ function applyLayers() {
   toggleL(destLayer, state.layers.dest);
   if (state.layers.dest) ensureDestinations();
   const cats = document.getElementById('destCats');
-  if (cats) cats.style.display = state.layers.dest ? 'block' : 'none';
+  if (cats) cats.hidden = !state.layers.dest;
+
+  // Stop layer lives in stops.js, which loads after this script — resolved
+  // lazily (like clearAllRoutes below) since applyLayers only runs from a click.
+  // Same lazy-fetch pattern as destinations: stops.json is pulled on first use.
+  if (typeof SS !== 'undefined') {
+    toggleL(SS.layer, state.layers.stops);
+    if (state.layers.stops) ensureStops(); else closeStopPanel();
+    const legend = document.getElementById('stopsLegend');
+    if (legend) legend.hidden = !state.layers.stops;
+  }
 }
 
 function toggleL(layer, on) {
@@ -323,11 +371,32 @@ function toggleL(layer, on) {
 // These are *service* destinations — the export set carries no jobs, floor-area
 // or business-registry data, so nothing here is presented as employment data.
 // Fetched lazily on first toggle, like neighbourhood_routes.json.
-const DEST_COLORS = [
-  '#e6b800', '#4da6ff', '#66cc99', '#ff8080', '#c9a0dc', '#b891ff',
-  '#ff9f4d', '#5fd0d0', '#f277b8', '#9dcc5f', '#ffd166', '#7aa5ff',
-  '#87d4a8', '#d98cff', '#ffab73', '#6fd4c4'
+//
+// The export carries 16 facility categories. Sixteen hues on one map is not a
+// legend anyone can read, so colour is carried by SERVICE FAMILY (six slots from
+// the validated categorical order) while the checkbox list keeps all 16 for
+// filtering — grouped under its family, where the name carries the identity.
+// Families are matched on the category name, not its numeric id, so a change to
+// the export's category order can't silently repaint the map.
+const DEST_FAMILIES = [
+  { id: 'edu',    name: 'חינוך',          test: /ספר|גנ[יי]? ילדים|חינוך|לימוד/ },
+  { id: 'health', name: 'בריאות',         test: /רפוא|מרפא|מרקחת|קופ[הות]|טיפ[הת] חלב|בריאות/ },
+  { id: 'sport',  name: 'ספורט ופנאי',    test: /ספורט|בריכ|אצטדיון|כושר|מגרש|חוף/ },
+  { id: 'comm',   name: 'קהילה ותרבות',   test: /קהיל|תרבות|מתנ״?ס/ },
+  { id: 'relig',  name: 'דת',             test: /כנסת|דת|מסגד|כנסי/ },
+  { id: 'other',  name: 'אחר',            test: /.^/ },  // never matches — the fallback
 ];
+
+const DEST_COLORS = {
+  dark:  { edu: '#3987e5', health: '#d95926', sport: '#199e70', comm: '#c98500', relig: '#d55181', other: '#9085e9' },
+  light: { edu: '#2a78d6', health: '#eb6834', sport: '#1baf7a', comm: '#eda100', relig: '#e87ba4', other: '#4a3aa7' },
+};
+
+function destFamily(catId) {
+  const cat = D.destinations && D.destinations.categories[catId];
+  const name = cat ? cat.name : '';
+  return (DEST_FAMILIES.find(f => f.test.test(name)) || DEST_FAMILIES[DEST_FAMILIES.length - 1]).id;
+}
 
 async function ensureDestinations() {
   if (D.destinations || D.destinationsLoading) { renderDestinations(); return; }
@@ -346,26 +415,40 @@ async function ensureDestinations() {
 }
 
 function destColor(catId) {
-  return DEST_COLORS[catId % DEST_COLORS.length];
+  const set = document.body.classList.contains('light-theme') ? DEST_COLORS.light : DEST_COLORS.dark;
+  return set[destFamily(catId)];
 }
 
 function renderDestCategories() {
   const wrap = document.getElementById('destCats');
   if (!wrap || !D.destinations) return;
-  wrap.innerHTML = D.destinations.categories.map(c => `
-    <label class="dest-cat">
-      <input type="checkbox" data-cat="${c.id}" checked>
-      <span class="dest-dot" style="background:${destColor(c.id)}"></span>
-      <span class="dest-name">${c.name}</span>
-      <span class="dest-count">${c.count.toLocaleString('he-IL')}</span>
-    </label>`).join('');
+
+  const rows = f => D.destinations.categories
+    .filter(c => destFamily(c.id) === f.id)
+    .map(c => `
+      <label class="dest-cat" title="${c.name}">
+        <input type="checkbox" data-cat="${c.id}" ${!state.destCats || state.destCats.has(c.id) ? 'checked' : ''}>
+        <span class="dest-dot" style="background:${destColor(c.id)}"></span>
+        <span class="dest-name">${c.name}</span>
+        <span class="dest-count">${c.count.toLocaleString('he-IL')}</span>
+      </label>`).join('');
+
+  wrap.innerHTML = DEST_FAMILIES
+    .map(f => {
+      const inner = rows(f);
+      return inner
+        ? `<div class="dest-group"><span class="dest-dot" style="background:${
+            (document.body.classList.contains('light-theme') ? DEST_COLORS.light : DEST_COLORS.dark)[f.id]
+          }"></span>${f.name}</div>${inner}`
+        : '';
+    })
+    .join('');
 
   wrap.querySelectorAll('input[data-cat]').forEach(cb => {
     cb.onchange = () => {
-      const on = new Set(
+      state.destCats = new Set(
         [...wrap.querySelectorAll('input[data-cat]:checked')].map(i => +i.dataset.cat)
       );
-      state.destCats = on;
       renderDestinations();
     };
   });
@@ -375,6 +458,9 @@ function renderDestinations() {
   if (!D.destinations) return;
   destLayer.clearLayers();
   const names = D.destinations.categories;
+  // A hairline in the basemap's own colour separates dots that overlap, and
+  // gives the lighter fills an edge to read against on the light basemap.
+  const ring = document.body.classList.contains('light-theme') ? '#ffffff' : '#0b0b0b';
 
   for (const [cat, lat, lon, name, subtype] of D.destinations.points) {
     if (state.destCats && !state.destCats.has(cat)) continue;
@@ -383,12 +469,16 @@ function renderDestinations() {
 
     const label = name || '(ללא שם)';
     const category = names[cat] ? names[cat].name : '';
+    // Small and light: city-wide this layer is ~2,400 points, and it has to sit
+    // over the speed network rather than bury it. Narrow to a neighbourhood (or
+    // a few categories) and the dots read individually.
     L.circleMarker([lat, lon], {
-      radius: 4,
-      color: destColor(cat),
-      weight: 1,
+      pane: 'pointPane',
+      radius: 3,
+      color: ring,
+      weight: 0.75,
       fillColor: destColor(cat),
-      fillOpacity: 0.85
+      fillOpacity: 0.9
     })
       .bindPopup(
         `<div dir="rtl" style="text-align:right">
@@ -411,8 +501,13 @@ function buildSpark() {
   D.speedProfile.forEach((v, i) => {
     const s = document.createElement('div');
     s.className = 'spk';
+    s.title = PNAMES[i] + ' ' + PTIMES[i] + (v == null ? ' · אין נתונים' : ` · ${v.toFixed(1)} קמ״ש`);
     const h = v == null ? 0 : (v / max * 100);
-    s.innerHTML = '<span class="val">' + (v == null ? '—' : v.toFixed(0)) + '</span><div class="bar" style="height:' + h + '%;background:' + col(v) + '"></div><span class="lab">P' + (i + 1) + '</span>';
+    // The bar's percentage height needs a parent of definite height, hence the
+    // wrapper — .spk itself is content-sized inside a flex-end row.
+    s.innerHTML = '<span class="val">' + (v == null ? '—' : v.toFixed(0)) + '</span>' +
+      '<span class="bar-wrap"><span class="bar" style="height:' + h + '%;background:' + col(v) + '"></span></span>' +
+      '<span class="lab">P' + (i + 1) + '</span>';
     s.onclick = () => {
       state.period = i;
       syncPer();
@@ -490,6 +585,15 @@ function updateMapTheme() {
   buildSpark();
   drawNeighborhoodBorder(D.borderGeoJson); // Redraw border to update outline contrast
   recolorImportedLayers();
+  // Destination dots and their category swatches are stepped per surface too.
+  if (D.destinations) { renderDestCategories(); renderDestinations(); }
+  // Route strokes live in neighbourhood.js, loaded after this script.
+  if (typeof recolorRoutes === 'function') recolorRoutes();
+  // The stop ramp is chosen per surface (dark-to-light on the dark basemap and
+  // the reverse on the light one), so the dots have to be re-stepped, not flipped.
+  if (typeof refreshStops === 'function') {
+    refreshStops(typeof NS !== 'undefined' ? NS.selectedNeigh : null);
+  }
 }
 
 themeToggleBtn.onclick = () => {
@@ -538,6 +642,10 @@ async function initAll() {
     if (kpisRes.ok) {
       const kpis = await kpisRes.json();
       D.speedProfile = kpis.speed_profile || null;
+      // City-wide ridership totals ride along in kpis.json so the boardings tile
+      // has a real figure before anyone opens the (lazily fetched) stop layer.
+      D.stopTotals = kpis.stops || null;
+      if (typeof updateStopsKpi === 'function') updateStopsKpi(null);
     }
 
     buildSpeed();
@@ -566,7 +674,7 @@ function escHtml(v) {
 }
 
 function importedColor() {
-  return document.body.classList.contains('light-theme') ? '#0891b2' : '#22d3ee';
+  return palette().imported;
 }
 
 document.getElementById('importFile').addEventListener('change', function (e) {
@@ -599,14 +707,38 @@ mapWrap.addEventListener('drop', e => {
   });
 });
 
+// The KML and Shapefile parsers are ~600 KB between them and most sessions never
+// import a file, so they are fetched the first time they're actually needed
+// rather than blocking the dashboard's first paint.
+const VENDOR = {
+  togeojson: 'https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js',
+  shp: 'https://unpkg.com/shpjs@6.2.0/dist/shp.js',
+  jszip: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+};
+
+const loadedScripts = new Map();
+function loadScript(url) {
+  if (!loadedScripts.has(url)) {
+    loadedScripts.set(url, new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = url;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error(`failed to load ${url}`));
+      document.head.appendChild(el);
+    }));
+  }
+  return loadedScripts.get(url);
+}
+
 function importFile(file) {
   const name = file.name.replace(/\.[^.]+$/, '');
   const ext = file.name.split('.').pop().toLowerCase();
 
   if (ext === 'kml') {
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
+        await loadScript(VENDOR.togeojson);
         const doc = new DOMParser().parseFromString(ev.target.result, 'text/xml');
         addImportedLayer(toGeoJSON.kml(doc), name);
       } catch {
@@ -619,6 +751,7 @@ function importFile(file) {
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
+        await Promise.all([loadScript(VENDOR.jszip), loadScript(VENDOR.shp)]);
         const zip = await JSZip.loadAsync(ev.target.result);
         const entries = Object.values(zip.files).filter(f => !f.dir);
 

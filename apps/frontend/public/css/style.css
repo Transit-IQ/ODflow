@@ -1,786 +1,753 @@
-/* ODFlow — Design System CSS */
+/* ODflow — dashboard design system.
+   Tokens mirror the ODflow marketing site (deep navy surface, teal primary,
+   Space Grotesk headings / Inter body) so the product reads as the same
+   product. Everything below that line is tuned for engineering use: flat
+   surfaces, hairline separators, tabular figures, no decorative blur. */
 
 :root {
-  /* Default Theme (Dark Mode) Variables */
-  --bg: #0a0d14;
-  --panel: #11151f;
-  --panel2: #161b27;
-  --line: #222a3a;
-  --ink: #e7ecf5;
-  --ink2: #93a0b8;
-  --ink3: #5c697f;
-  
-  --amber: #ff8a3d;
-  --amber2: #ffb06b;
-  --cyan: #22d3ee;
-  
-  /* Speeds */
-  --s1: #7a0c2e;
-  --s2: #c0142d;
-  --s3: #e8472b;
-  --s4: #f59e0b;
-  --s5: #facc15;
-  --s6: #4ade80;
-  --s7: #22d3ee;
-  
-  /* Overlays */
-  --backdrop: rgba(17, 21, 31, 0.92);
-  --header-grad: linear-gradient(90deg, #11151f, #0d1018);
-  --stpanel-bg: rgba(17, 21, 31, 0.96);
-  --highlight: #1d212c;
-  --btn-ink: #0a0d14;
-  --sw-bg: #2a3346;
-  --sw-knob: #6b7891;
-  --hover-border: #3a455e;
+  color-scheme: dark;
+
+  /* Surfaces — site --background / --card / --muted */
+  --bg: #0f1f3e;
+  --panel: #16294a;
+  --panel2: #1b3155;
+  --line: #1f3b61;
+  --line-soft: rgba(255, 255, 255, .07);
+
+  /* Ink — site --foreground / --muted-foreground */
+  --ink: #f5f5f5;
+  --ink2: #94a3b8;
+  --ink3: #6b7b93;
+
+  /* Brand — site --primary (teal) / --secondary (blue) / --accent (red) */
+  --primary: #14b8a6;
+  --primary-hi: #2dd4bf;
+  --primary-ink: #06231f;
+  --secondary: #38bdf8;
+  --danger: #f43f5e;
+
+  /* Domain hues. Every one of these is the colour its subject already wears on
+     the map, so a tinted control says which layer it drives:
+     teal = ridership · rose = congestion · blue = the road network
+     violet = places & land use · amber = time of day */
+  --c-ride: #14b8a6;
+  --c-cong: #f43f5e;
+  --c-net: #38bdf8;
+  --c-place: #a78bfa;
+  --c-time: #fbbf24;
+
+  --ramp: linear-gradient(90deg, var(--sp1), var(--sp2), var(--sp3), var(--sp4), var(--sp5));
+
+  /* Bus-speed bands. Validated as a set against the dark basemap:
+     CVD-separated, all ≥3:1 contrast. Band edges: 8 / 15 / 22 / 30 km/h,
+     with 15 matching the congestion threshold the KPI reports. */
+  --sp1: #e11d48;
+  --sp2: #f97316;
+  --sp3: #facc15;
+  --sp4: #34d399;
+  --sp5: #60a5fa;
+
+  --focus: #2dd4bf;
+  --overlay: rgba(15, 31, 62, .94);
+  --shadow: 0 8px 24px rgba(0, 0, 0, .35);
+
+  --font-sans: 'Inter', 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-head: 'Space Grotesk', 'Heebo', -apple-system, sans-serif;
+  --font-num: 'Space Grotesk', 'Inter', ui-monospace, monospace;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --head-h: 52px;
+  --side-w: 300px;
+  --kpi-h: 62px;
 }
 
 body.light-theme {
-  /* Light Theme Variables */
+  color-scheme: light;
+
+  /* Site light-section palette */
   --bg: #f8fafc;
   --panel: #ffffff;
   --panel2: #f1f5f9;
-  --line: #cbd5e1;
-  --ink: #0f172a;
-  --ink2: #475569;
-  --ink3: #64748b;
-  
-  --amber: #ea580c;
-  --amber2: #c2410c;
-  --cyan: #0891b2;
-  
-  /* Optimized Speeds for Light Mode */
-  --s1: #991b1b;
-  --s2: #dc2626;
-  --s3: #ef4444;
-  --s4: #f97316;
-  --s5: #d97706;
-  --s6: #16a34a;
-  --s7: #2563eb;
-  
-  /* Overlays */
-  --backdrop: rgba(255, 255, 255, 0.9);
-  --header-grad: linear-gradient(90deg, #ffffff, #f8fafc);
-  --stpanel-bg: rgba(255, 255, 255, 0.96);
-  --highlight: #e2e8f0;
-  --btn-ink: #ffffff;
-  --sw-bg: #cbd5e1;
-  --sw-knob: #64748b;
-  --hover-border: #94a3b8;
+  --line: #e2e8f0;
+  --line-soft: rgba(15, 31, 62, .08);
+
+  --ink: #0f1f3e;
+  --ink2: #48566a;
+  --ink3: #657b8b;
+
+  --primary: #0f766e;
+  --primary-hi: #0d9488;
+  --primary-ink: #ffffff;
+  --secondary: #1d4ed8;
+  --danger: #be123c;
+
+  --c-ride: #0f766e;
+  --c-cong: #be123c;
+  --c-net: #1d4ed8;
+  --c-place: #6d28d9;
+  --c-time: #b45309;
+
+  /* Same five bands re-stepped for the light basemap. */
+  --sp1: #e11d48;
+  --sp2: #9a3412;
+  --sp3: #ca8a04;
+  --sp4: #15803d;
+  --sp5: #1d4ed8;
+
+  --focus: #0f766e;
+  --overlay: rgba(255, 255, 255, .95);
+  --shadow: 0 8px 24px rgba(15, 31, 62, .12);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0 }
 
-html, body {
-  height: 100%;
-}
+/* Several hidden blocks below set an explicit display, which would otherwise
+   beat the UA's [hidden] rule and leave them on screen. */
+[hidden] { display: none !important }
+
+html, body { height: 100% }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Heebo', sans-serif;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
   overflow: hidden;
-  transition: background 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-head) }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Figures line up column-to-column and don't jitter while the day animates. */
+.v, .u, .num, .pn, .pt, .ramp-ticks, .neigh-route-count,
+.stop-tile-val, .chip, .band-val, .rider-pct, .stop-top-val, .spk .val, .spk .lab {
+  font-variant-numeric: tabular-nums;
 }
 
 #app {
   display: grid;
-  grid-template-columns: 340px 1fr;
-  grid-template-rows: 64px 1fr;
-  height: 100vh;
+  grid-template-columns: var(--side-w) 1fr;
+  grid-template-rows: var(--head-h) 1fr;
   grid-template-areas: "head head" "side map";
+  height: 100vh;
 }
 
-/* Header */
+/* ── Header ──────────────────────────────────────────────────────────────── */
 header {
   grid-area: head;
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 0 22px;
-  background: var(--header-grad);
+  gap: 16px;
+  padding: 0 16px;
+  /* A wash off the brand mark, echoing the site's hero backdrop. */
+  background:
+    linear-gradient(to left, rgba(20, 184, 166, .16), rgba(56, 189, 248, .07) 38%, transparent 68%),
+    var(--panel);
   border-bottom: 1px solid var(--line);
   z-index: 600;
-  transition: background 0.3s ease, border-bottom 0.3s ease;
+}
+
+body.light-theme header {
+  background:
+    linear-gradient(to left, rgba(13, 148, 136, .12), rgba(29, 78, 216, .05) 38%, transparent 68%),
+    var(--panel);
 }
 
 .brand {
-  font-family: 'Rubik', sans-serif;
-  font-weight: 900;
-  font-size: 22px;
-  letter-spacing: .5px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -.02em;
   direction: ltr;
 }
 
-.brand b {
-  color: var(--amber);
-}
-
-.brand .flow {
-  background: var(--amber);
-  color: var(--btn-ink);
-  padding: 0 7px;
-  border-radius: 5px;
-  margin-inline-start: 2px;
-  transition: background 0.2s ease, color 0.2s ease;
-}
+.brand .flow { color: var(--primary) }
 
 .sub {
   color: var(--ink2);
-  font-size: 13px;
+  font-size: 12.5px;
   border-inline-start: 1px solid var(--line);
-  padding-inline-start: 18px;
+  padding-inline-start: 16px;
 }
 
-.sub b {
-  color: var(--ink);
+.sub b { color: var(--ink); font-weight: 600 }
+
+.head-right {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .tag {
-  margin-inline-start: auto;
-  font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
-  color: var(--ink3);
+  color: var(--ink2);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 5px 12px;
+  border-radius: 999px;
+  padding: 4px 11px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .tag .dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--s6);
-  animation: pulse 2s infinite;
+  background: var(--primary);
+  animation: pulse 2.4s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .3; }
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important }
 }
 
-/* Theme Toggle Button */
-.theme-btn {
+.icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--panel2);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: transparent;
   border: 1px solid var(--line);
   color: var(--ink2);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color .15s, border-color .15s;
 }
 
-.theme-btn:hover {
-  border-color: var(--amber);
-  color: var(--amber);
-  transform: scale(1.05);
-}
+.icon-btn:hover { border-color: var(--primary); color: var(--primary) }
+.icon-btn svg { width: 16px; height: 16px; fill: currentColor }
 
-.theme-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
+body.light-theme .icon-btn .sun-icon { display: none }
+body:not(.light-theme) .icon-btn .moon-icon { display: none }
 
-body.light-theme .theme-btn .sun-icon {
-  display: none;
-}
-
-body:not(.light-theme) .theme-btn .moon-icon {
-  display: none;
-}
-
-/* Sidebar */
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
 aside {
   grid-area: side;
   background: var(--panel);
   border-inline-end: 1px solid var(--line);
   overflow-y: auto;
-  padding: 16px;
-  transition: background 0.3s ease, border-inline-end 0.3s ease;
+  overscroll-behavior: contain;
+  padding: 4px 0 20px;
 }
 
-aside::-webkit-scrollbar {
-  width: 8px;
-}
-
-aside::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 4px;
-}
+aside::-webkit-scrollbar { width: 8px }
+aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px }
 
 .block {
-  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
+.block:last-child { border-bottom: 0 }
+
+/* Each block declares the hue of the thing it controls; the rule beside its
+   title is the same colour that thing wears on the map. */
 .block h3 {
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  color: var(--ink3);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  color: var(--ink2);
   text-transform: uppercase;
-  font-weight: 700;
-  margin-bottom: 10px;
+  font-weight: 600;
+  margin-bottom: 9px;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .block h3::before {
   content: "";
-  width: 14px;
-  height: 2px;
-  background: var(--amber);
+  width: 3px;
+  height: 12px;
   border-radius: 2px;
+  background: var(--tint, var(--primary));
+  flex: 0 0 auto;
 }
 
-/* Day Pills */
-.days {
-  display: flex;
-  gap: 5px;
-}
+.block h3 + h3 { margin-top: 16px }
+
+/* Day pills */
+.days { display: flex; gap: 4px; margin-bottom: 8px }
 
 .day {
   flex: 1;
   text-align: center;
-  padding: 9px 0;
+  padding: 6px 0;
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: 700;
-  font-size: 14px;
-  transition: .15s;
+  font-weight: 600;
+  font-size: 12.5px;
   color: var(--ink2);
+  transition: border-color .12s, color .12s;
 }
 
-.day:hover {
-  border-color: var(--hover-border);
-}
+.day:hover { border-color: var(--primary); color: var(--ink) }
 
 .day.on {
-  background: var(--amber);
-  color: var(--btn-ink);
-  border-color: var(--amber);
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: var(--primary);
 }
 
-.day.avg {
-  flex: 1.6;
-  font-size: 12px;
-  font-family: 'Heebo', sans-serif;
-}
+.day.avg { flex: 1.7; font-size: 11.5px }
 
-/* Period */
-.periods {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
+/* Time-of-day rows */
+.periods { display: flex; flex-direction: column; gap: 3px }
 
 .prow {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: .15s;
+  transition: background .12s, border-color .12s;
 }
 
-.prow:hover {
-  border-color: var(--hover-border);
-}
+.prow:hover { background: var(--panel2) }
 
 .prow.on {
-  border-color: var(--amber);
-  background: var(--highlight);
+  border-color: var(--primary);
+  background: var(--panel2);
 }
 
 .prow .pn {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: var(--amber);
-  width: 22px;
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--ink3);
+  width: 20px;
   font-weight: 600;
 }
 
-.prow .pl {
-  font-size: 13px;
-  flex: 1;
-  color: var(--ink);
-}
-
-.prow .pt {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: var(--ink3);
-}
+.prow.on .pn { color: var(--primary) }
+.prow .pl { font-size: 12.5px; flex: 1; color: var(--ink) }
+.prow .pt { font-size: 11px; color: var(--ink3) }
 
 .allp {
-  margin-top: 6px;
+  margin-top: 5px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--ink2);
-  padding: 7px;
+  padding: 6px;
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: .15s;
 }
+
+.allp:hover { border-color: var(--primary); color: var(--ink) }
 
 .allp.on {
   border-style: solid;
-  border-color: var(--amber);
-  color: var(--amber);
+  border-color: var(--primary);
+  color: var(--primary);
   background: var(--panel2);
 }
 
-.playrow {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
+.playrow { display: flex; gap: 6px; margin-top: 10px }
 
 .btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 10px;
-  background: var(--amber);
-  color: var(--btn-ink);
-  border: none;
-  border-radius: 8px;
-  font-family: 'Heebo', sans-serif;
-  font-weight: 700;
-  font-size: 13px;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 12px;
   cursor: pointer;
-  transition: .15s;
+  transition: background .12s, border-color .12s, color .12s;
 }
 
-.btn:hover {
-  background: var(--amber2);
-}
+.btn:hover { background: var(--primary-hi); border-color: var(--primary-hi) }
 
 .btn.ghost {
   background: transparent;
-  border: 1px solid var(--line);
+  border-color: var(--line);
   color: var(--ink2);
-  flex: 0 0 46px;
+  flex: 0 0 auto;
+  padding-inline: 12px;
 }
 
-.btn.ghost:hover {
-  border-color: var(--amber);
-  color: var(--amber);
-  background: var(--panel2);
+.btn.ghost:hover { border-color: var(--primary); color: var(--primary); background: transparent }
+
+/* Sparkline — average speed per time-of-day window */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 62px;
+  margin-top: 10px;
 }
 
-/* Layer Toggles */
+.spk {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.spk .bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.spk .bar {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: opacity .15s;
+  opacity: .62;
+}
+
+.spk:hover .bar, .spk.on .bar { opacity: 1 }
+.spk.on .bar { box-shadow: inset 0 0 0 1px var(--ink) }
+.spk .lab, .spk .val { font-family: var(--font-num); font-size: 9.5px; color: var(--ink3) }
+.spk.on .val { color: var(--ink); font-weight: 600 }
+
+.spark-cap { font-size: 10px; color: var(--ink3); margin-top: 6px }
+
+/* Layer toggles */
 .toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: 9px;
+  padding: 6px 8px;
+  margin-inline: -8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.2s ease;
 }
 
-.toggle:hover {
-  background: var(--panel2);
-}
+.toggle:hover { background: var(--panel2) }
+.toggle.on .tl { color: var(--ink); font-weight: 500 }
 
+/* A live switch wears its own layer's colour, so the sidebar reads back what is
+   currently drawn on the map without anyone matching labels to swatches. */
 .sw {
-  width: 38px;
-  height: 21px;
-  border-radius: 12px;
-  background: var(--sw-bg);
+  width: 32px;
+  height: 18px;
+  border-radius: 10px;
+  background: var(--line);
+  border: 1px solid var(--line);
   position: relative;
-  transition: .2s;
+  transition: background .15s;
   flex: 0 0 auto;
 }
 
 .sw::after {
   content: "";
   position: absolute;
-  width: 15px;
-  height: 15px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: var(--sw-knob);
-  top: 3px;
-  right: 3px;
-  transition: .2s;
+  background: var(--ink3);
+  top: 2px;
+  right: 2px;
+  transition: right .15s, background .15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
 }
 
 .toggle.on .sw {
-  background: var(--amber);
+  background: var(--tint, var(--primary));
+  border-color: transparent;
 }
 
-.toggle.on .sw::after {
-  background: var(--panel);
-  right: 20px;
-}
+.toggle.on .sw::after { background: #fff; right: 16px }
 
-.toggle .tl {
-  font-size: 13px;
-  flex: 1;
-}
+.toggle .tl { font-size: 12.5px; flex: 1; color: var(--ink2) }
 
 .toggle .tc {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   flex: 0 0 auto;
 }
 
-/* Legend */
+/* the destinations layer draws six family colours, not one */
+.tc-multi {
+  width: 14px;
+  background: linear-gradient(90deg, #3987e5 0 33.3%, #d95926 33.3% 66.6%, #199e70 66.6%);
+}
+
+body.light-theme .tc-multi {
+  background: linear-gradient(90deg, #2a78d6 0 33.3%, #eb6834 33.3% 66.6%, #1baf7a 66.6%);
+}
+
+/* Speed ramp legend */
+.ramp-bar { display: flex; gap: 2px; height: 10px }
+.ramp-bar span { flex: 1; border-radius: 2px }
+
+.ramp-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-num);
+  font-size: 10px;
+  color: var(--ink3);
+  margin-top: 4px;
+}
+
+.ramp-ticks i { font-style: normal }
+
+.ramp-note {
+  font-size: 10.5px;
+  color: var(--ink3);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+.ramp-note b { color: var(--ink2); font-weight: 600 }
+
+/* Generic swatch legend (stops layer) */
 .legend {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11.5px;
   color: var(--ink2);
 }
 
-.lg {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
+.lg { display: flex; align-items: center; gap: 8px }
+.lg span { width: 22px; height: 9px; border-radius: 2px; flex: 0 0 auto }
 
-.lg span {
-  width: 26px;
-  height: 10px;
-  border-radius: 2px;
-}
-
-.note {
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--ink3);
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.note b {
-  color: var(--ink2);
-}
+/* Route list */
+.lines-scroll { overflow-y: auto; overscroll-behavior: contain }
+.lines { list-style: none }
 
 .lines li {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink2);
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+  padding: 5px 7px;
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
-  list-style: none;
   cursor: pointer;
-  border-radius: 6px;
-  margin-bottom: 3px;
-  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background .12s;
 }
 
-.lines li:hover {
-  background: var(--panel2);
-  color: var(--ink);
-}
-
-.lines li.active {
-  border-color: var(--amber);
-  background: var(--highlight);
-  color: var(--ink);
-}
+.lines li:hover { background: var(--panel2); color: var(--ink) }
 
 .lines .num {
-  font-family: 'IBM Plex Mono', monospace;
-  font-weight: 600;
-  background: var(--highlight);
-  border: 1px solid var(--line);
-  color: var(--amber);
+  font-family: var(--font-num);
+  font-weight: 700;
   min-width: 34px;
   text-align: center;
-  border-radius: 6px;
-  padding: 3px 0;
-  font-size: 12px;
+  border-radius: 4px;
+  padding: 2px 0;
+  font-size: 11.5px;
+  flex: 0 0 auto;
 }
 
-/* Map Area */
+.lines .desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lines .ag { font-size: 10px; color: var(--ink3); flex: 0 0 auto }
+
+/* ── Map area ────────────────────────────────────────────────────────────── */
 #mapwrap {
   grid-area: map;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 #map {
-  position: absolute;
-  inset: 0;
+  flex: 1;
+  min-height: 0;
+  position: relative;
   background: var(--bg);
-  transition: background 0.3s ease;
 }
 
 .leaflet-container {
   background: var(--bg);
-  font-family: 'Heebo', sans-serif;
+  font-family: var(--font-sans);
   direction: ltr !important;
 }
 
-/* KPI Overlay */
-.kpis {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  left: 14px;
-  display: flex;
-  gap: 12px;
-  z-index: 500;
-  pointer-events: none;
+/* The dark basemap ships neutral grey. Tinting it toward the brand navy makes
+   the map read as part of the product, and pushes the grey back far enough that
+   the speed bands sit clearly in front of it. Applied to the base tiles only,
+   so the label layer above stays neutral and legible. */
+body:not(.light-theme) .basemap {
+  filter: brightness(1.55) sepia(.85) hue-rotate(179deg) saturate(2.4) brightness(.92);
 }
 
-.kpi {
-  flex: 1;
-  background: var(--backdrop);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 13px 16px;
-  pointer-events: auto;
-  transition: background 0.3s ease, border 0.3s ease;
+/* Voyager's own colours are strong enough to argue with the speed bands, so the
+   basemap is held at low chroma: parks, water and built-up land stay readable
+   as context, and full saturation belongs to the data. */
+body.light-theme .basemap {
+  filter: saturate(.5) brightness(1.04);
 }
+
+/* KPI bar — docked, not floating: it never covers the network it describes. */
+.kpis {
+  flex: 0 0 auto;
+  height: var(--kpi-h);
+  display: flex;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Each tile is capped by the colour of what it counts — the speed tile by the
+   whole band ramp, the others by their layer's hue. The strip doubles as a
+   legend for the map below it. */
+.kpi {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px 8px;
+  border-inline-start: 1px solid var(--line-soft);
+}
+
+.kpi::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background: var(--tint, var(--line));
+}
+
+.kpi:first-child { border-inline-start: 0 }
 
 .kpi .k {
-  font-size: 11px;
-  color: var(--ink3);
-  letter-spacing: .5px;
-  margin-bottom: 5px;
-  font-weight: 500;
+  font-size: 10.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+.kpi .row { display: flex; align-items: baseline; gap: 4px; margin-top: 1px }
 
 .kpi .v {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 27px;
+  font-family: var(--font-num);
+  font-size: 21px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.1;
+  color: var(--tone, var(--ink));
 }
 
-.kpi .u {
-  font-size: 12px;
-  color: var(--ink2);
-  font-family: 'Heebo', sans-serif;
-  margin-inline-start: 4px;
-}
-
-.kpi.accent .v {
-  color: var(--amber);
-}
+.kpi .u { font-size: 11px; color: var(--ink2) }
 
 .kpi .d {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ink3);
-  margin-top: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Profile Chart Bottom */
-.profile {
-  position: absolute;
-  bottom: 14px;
-  right: 14px;
-  z-index: 500;
-  background: var(--backdrop);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 13px 16px;
-  width: 340px;
-  transition: background 0.3s ease, border 0.3s ease;
-}
-
-.profile h4 {
-  font-size: 11px;
-  color: var(--ink3);
-  letter-spacing: .8px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  font-weight: 700;
-}
-
-.spark {
-  display: flex;
-  align-items: flex-end;
-  gap: 5px;
-  height: 74px;
-}
-
-.spk {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-}
-
-.spk .bar {
-  width: 100%;
-  border-radius: 4px 4px 0 0;
-  background: var(--s4);
-  transition: .25s;
-  min-height: 3px;
-}
-
-.spk .lab {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9.5px;
-  color: var(--ink3);
-}
-
-.spk.on .bar {
-  background: var(--amber);
-}
-
-.spk .val {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9.5px;
-  color: var(--ink2);
-}
-
-/* Time Badge */
+/* Selected day/period readout, anchored to the map itself */
 .timebadge {
   position: absolute;
-  bottom: 14px;
-  left: 14px;
+  bottom: 12px;
+  left: 12px;
   z-index: 500;
-  background: var(--backdrop);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--overlay);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 18px;
+  border-radius: var(--radius);
+  padding: 8px 14px;
   direction: rtl;
-  transition: background 0.3s ease, border 0.3s ease;
+  box-shadow: var(--shadow);
 }
 
 .timebadge .now {
-  font-family: 'Rubik', sans-serif;
-  font-weight: 900;
-  font-size: 20px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 15px;
   color: var(--ink);
 }
 
-.timebadge .lbl {
-  font-size: 11px;
-  color: var(--ink3);
-  margin-top: 3px;
-}
+.timebadge .lbl { font-size: 10.5px; color: var(--ink3); margin-top: 2px }
 
-/* Popups style overrides */
-.leaflet-popup-content-wrapper {
-  background: var(--panel2);
+/* ── Leaflet chrome ──────────────────────────────────────────────────────── */
+.leaflet-popup-content-wrapper,
+.leaflet-tooltip {
+  background: var(--overlay);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-family: var(--font-sans);
+  font-size: 12px;
 }
 
-.leaflet-popup-tip {
-  background: var(--panel2);
+.leaflet-popup-tip { background: var(--panel) }
+
+.leaflet-tooltip-top::before { border-top-color: var(--line) }
+.leaflet-tooltip-bottom::before { border-bottom-color: var(--line) }
+.leaflet-tooltip-left::before { border-left-color: var(--line) }
+.leaflet-tooltip-right::before { border-right-color: var(--line) }
+
+.pp { direction: rtl; line-height: 1.5 }
+.pp b { font-family: var(--font-num); color: var(--primary); font-size: 15px }
+
+.leaflet-bar a {
+  background-color: var(--panel) !important;
+  color: var(--ink) !important;
+  border-bottom: 1px solid var(--line) !important;
 }
 
-.pp {
-  direction: rtl;
-  font-family: 'Heebo', sans-serif;
-  line-height: 1.4;
-}
+.leaflet-bar a:hover { background-color: var(--panel2) !important; color: var(--primary) !important }
 
-.pp b {
-  font-family: 'IBM Plex Mono', monospace;
-  color: var(--amber);
-}
+.route-stop-marker { transition: transform .15s ease }
+.route-stop-marker:hover { transform: scale(1.4) }
 
-.dest-ico {
-  background: var(--cyan);
-  border: 2px solid var(--bg);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--cyan);
-}
+/* ── Layer import ────────────────────────────────────────────────────────── */
+.import-btn { width: 100%; justify-content: center; cursor: pointer; margin-bottom: 8px }
 
-.legacy {
-  display: none;
-}
-
-@media(max-width:900px) {
-  #app {
-    grid-template-columns: 1fr;
-    grid-template-areas: "head" "map";
-  }
-  aside {
-    display: none;
-  }
-  .profile {
-    display: none;
-  }
-  .kpis {
-    flex-wrap: wrap;
-  }
-}
-
-/* Import Layer */
-.import-btn {
-  width: 100%;
-  justify-content: center;
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
-.imported-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
+.imported-list { list-style: none; display: flex; flex-direction: column; gap: 4px }
 
 .imported-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 5px 8px;
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
-.imported-item .sw {
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.imported-item.on .sw {
-  background: var(--cyan);
-}
-
-.imported-item.on .sw::after {
-  background: var(--panel);
-  right: 20px;
-}
+.imported-item .sw { cursor: pointer }
+.imported-item.on .sw { background: var(--secondary); border-color: var(--secondary) }
+.imported-item.on .sw::after { background: var(--panel); right: 16px }
 
 .imported-name {
-  font-size: 12px;
+  font-size: 11.5px;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -793,106 +760,77 @@ aside::-webkit-scrollbar-thumb {
   border: none;
   color: var(--ink3);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   padding: 2px 4px;
   border-radius: 4px;
-  transition: color 0.15s;
   line-height: 1;
 }
 
-.imported-remove:hover {
-  color: var(--s2);
-}
+.imported-remove:hover { color: var(--danger) }
 
-/* Drop zone highlight */
 #mapwrap.drop-active::after {
-  content: "שחרר כאן קובץ GeoJSON";
+  content: "שחרר כאן קובץ GeoJSON / KML / SHP";
   position: absolute;
   inset: 0;
   z-index: 1000;
-  background: rgba(34, 211, 238, 0.12);
-  border: 3px dashed var(--cyan);
-  border-radius: 4px;
+  background: rgba(20, 184, 166, .1);
+  border: 2px dashed var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Rubik', sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--cyan);
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary);
   pointer-events: none;
 }
 
-
-/* Adjust Leaflet zoom controls for theme */
-.leaflet-bar a {
-  background-color: var(--panel) !important;
-  color: var(--ink) !important;
-  border-bottom: 1px solid var(--line) !important;
-  transition: background-color 0.2s, color 0.2s;
-}
-
-.leaflet-bar a:hover {
-  background-color: var(--panel2) !important;
-  color: var(--amber) !important;
-}
-
-/* Route Stop Markers */
-.route-stop-marker {
-  transition: transform 0.15s ease;
-}
-
-.route-stop-marker:hover {
-  transform: scale(1.5);
-}
-
-/* Leaflet Tooltip Theme Overrides */
-.leaflet-tooltip {
-  background: var(--panel2);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  padding: 6px 10px;
-  font-family: 'Heebo', sans-serif;
-  font-size: 12px;
-}
-
-.leaflet-tooltip-top::before {
-  border-top-color: var(--panel2);
-}
-
-.leaflet-tooltip-bottom::before {
-  border-bottom-color: var(--panel2);
-}
-
-.leaflet-tooltip-left::before {
-  border-left-color: var(--panel2);
-}
-
-.leaflet-tooltip-right::before {
-  border-right-color: var(--panel2);
-}
-
-/* ── Destination category filter (civic & service facilities) ───────────────── */
+/* ── Destination category filter ─────────────────────────────────────────── */
 .dest-cats {
   margin-top: 8px;
-  max-height: 190px;
+  max-height: 210px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 6px;
   background: var(--panel2);
 }
+
+.dest-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin: 8px 0 3px;
+}
+
+.dest-group:first-child { margin-top: 0 }
+
 .dest-cat {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 2px;
-  font-size: 11px;
+  padding: 2px;
+  font-size: 11.5px;
   cursor: pointer;
+  border-radius: 4px;
 }
-.dest-cat input { accent-color: var(--amber); cursor: pointer; }
-.dest-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.dest-name { flex: 1; }
-.dest-count { opacity: .6; font-size: 10px; }
+
+.dest-cat:hover { background: var(--panel) }
+.dest-cat input { accent-color: var(--primary); cursor: pointer }
+.dest-dot { width: 8px; height: 8px; border-radius: 50%; flex: none }
+.dest-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.dest-count { color: var(--ink3); font-size: 10px; font-variant-numeric: tabular-nums }
+
+/* ── Narrow screens ──────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  #app { grid-template-columns: 1fr; grid-template-areas: "head" "map" }
+  aside { display: none }
+  .sub, .tag { display: none }
+  .kpis { height: auto; flex-wrap: wrap }
+  .kpi { flex: 1 1 50%; border-top: 1px solid var(--line-soft) }
+}
