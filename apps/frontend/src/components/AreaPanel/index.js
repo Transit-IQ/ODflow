@@ -4,6 +4,7 @@ import { setState } from '../../core/store.js';
 import { data, loadNeighbourhoods, loadRoutesIndex } from '../../core/data.js';
 import { fmtNum, escHtml } from '../../core/format.js';
 import { agencyLabel } from '../../core/agencies.js';
+import { groupByKind } from '../../core/routeKind.js';
 import * as routes from '../../layers/routes.js';
 
 /**
@@ -37,7 +38,7 @@ export function AreaPanel({ onAreaChange } = {}) {
 
         <div class="neigh-loading" hidden><span class="neigh-spinner"></span> טוען קווים…</div>
         <div class="neigh-route-count"></div>
-        <div class="lines-scroll" style="max-height:240px"><ul class="lines"></ul></div>
+        <div class="lines-scroll" style="max-height:280px"></div>
       </div>
     </div>`;
 
@@ -47,7 +48,7 @@ export function AreaPanel({ onAreaChange } = {}) {
   const statsEl = $(el, '.neigh-stats');
   const loadingEl = $(el, '.neigh-loading');
   const countEl = $(el, '.neigh-route-count');
-  const listEl = $(el, '.lines');
+  const listEl = $(el, '.lines-scroll');
 
   let routesInArea = [];
 
@@ -88,23 +89,38 @@ export function AreaPanel({ onAreaChange } = {}) {
   }
 
   // ── Route list ──────────────────────────────────────────────────────────
+  // Split into עירוני / בין-עירוני, urban first — the lines that stay inside
+  // the city are the ones a municipal planner acts on, and they are a small
+  // minority of what passes through any given neighbourhood.
+  function routeRow(r) {
+    const active = routes.isActive(r.route_id);
+    const color = routes.colorFor(r.route_id);
+
+    const li = html`
+      <li class="${active ? 'neigh-active' : ''}">
+        <span class="num" style="background:${active ? color : `color-mix(in srgb, ${color} 20%, transparent)`};color:${active ? '#fff' : color}">${escHtml(r.route_short_name || '?')}</span>
+        <span class="desc" title="${escHtml(r.route_long_name || '')}">${escHtml(r.route_long_name || 'ללא תיאור')}</span>
+        <span class="ag">${escHtml(agencyLabel(r.agency_id))}</span>
+        ${active ? `<span class="neigh-color-dot" style="background:${color}"></span>` : ''}
+      </li>`;
+
+    li.addEventListener('click', () => { routes.toggle(r); renderRoutes(); });
+    return li;
+  }
+
   function renderRoutes() {
     listEl.replaceChildren();
 
-    for (const r of routesInArea) {
-      const active = routes.isActive(r.route_id);
-      const color = routes.colorFor(r.route_id);
+    for (const group of groupByKind(routesInArea)) {
+      listEl.append(html`
+        <div class="lines-group">
+          <span>${group.label}</span>
+          <span class="lines-group-n">${fmtNum(group.routes.length)}</span>
+        </div>`);
 
-      const li = html`
-        <li class="${active ? 'neigh-active' : ''}">
-          <span class="num" style="background:${active ? color : `color-mix(in srgb, ${color} 20%, transparent)`};color:${active ? '#fff' : color}">${escHtml(r.route_short_name || '?')}</span>
-          <span class="desc" title="${escHtml(r.route_long_name || '')}">${escHtml(r.route_long_name || 'ללא תיאור')}</span>
-          <span class="ag">${escHtml(agencyLabel(r.agency_id))}</span>
-          ${active ? `<span class="neigh-color-dot" style="background:${color}"></span>` : ''}
-        </li>`;
-
-      li.addEventListener('click', () => { routes.toggle(r); renderRoutes(); });
-      listEl.appendChild(li);
+      const ul = html`<ul class="lines"></ul>`;
+      ul.append(...group.routes.map(routeRow));
+      listEl.append(ul);
     }
   }
 

@@ -50,6 +50,7 @@ src/
     data.js            fetches + caches the generated JSON
     geo.js             point-in-area tests
     format.js          Hebrew labels, number formatting, escaping
+    routeKind.js       urban / intercity split, parsed off route_long_name
     agencies.js        agency id → Hebrew name
     vendor.js          on-demand loader for the import parsers
     dom.js             html`` and $() — the only two DOM helpers
@@ -104,9 +105,26 @@ basemap it draws on, so changing one hex means re-checking the whole set.
 | `neighbourhoods.json` | Index of the 71 selectable neighbourhoods (id/name/bbox/**boundary**/population/route_ids) — every one is an official municipal polygon, see `../../data/README.md` |
 | `neighbourhood_routes.json` | Shared route lookup (shape + stops) referenced by `neighbourhoods.json`, fetched lazily on first use |
 
-The "קווי אוטובוס בשכונה" sidebar list is driven entirely by whichever neighbourhood is selected in
+The "קווי אוטובוס באזור" sidebar list is driven entirely by whichever neighbourhood is selected in
 the dropdown at the top (no neighbourhood selected on load) — there is no separate hardcoded route
 list, and the dropdown itself is filled from `neighbourhoods.json`.
+
+It is split into **עירוני** and **בין-עירוני** sections, urban first, each sorted by line number.
+Nothing in the feed flags a line as one or the other, so `src/core/routeKind.js` derives it from the
+MOT's strictly formatted `route_long_name`, which carries both endpoint cities:
+
+```
+<origin stop>-<origin city><-><destination stop>-<destination city>-<direction code>
+מסוף עתידים-תל אביב יפו<->ת. רכבת אוניברסיטה/הורדה-תל אביב יפו-11     ← urban
+מסוף כרמלית/הכרמל-תל אביב יפו<->מסוף קדמה-רמת השרון-11                 ← intercity
+```
+
+A line is urban when **both** endpoints are `HOME_CITY` (Tel Aviv-Yafo). Same-city-elsewhere lines
+are deliberately not urban: Holon's internal 4/5/6 and the 800-series park-and-ride shuttles (both
+ends חניון שפיים) pass through the city but are not Tel Aviv urban lines. All 700 routes in the
+index parse, and the urban set comes out as the recognisable internal network (2–16, 31, 44, 52, 54,
+79, 80, 114, 6א). Because this reads a string rather than a real field, the sturdier long-term home
+for the flag is the pipeline — see the note in that module.
 
 ## Development
 
