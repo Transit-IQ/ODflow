@@ -101,30 +101,42 @@ basemap it draws on, so changing one hex means re-checking the whole set.
 | `border.json` | Tel Aviv city-limits polygon (GeoJSON) |
 | `speeds.json` | Bus speed segments clipped to the city, each with a 35-value (5 days × 7 periods) speed array |
 | `kpis.json` | Derived KPIs: segment count, average-speed-by-period profile, and city-wide ridership totals (fetched on page load so the boardings tile has a figure before the stop layer is opened) |
-| `stops.json` | The city's 1,069 survey stops: boardings/day and by time band, scheduled calls, transfer share, rider mix, the GTFS lines calling there, and the neighbourhood each stands in. Fetched lazily on first toggle of the תחנות ועליות layer |
-| `neighbourhoods.json` | Index of the 71 selectable neighbourhoods (id/name/bbox/**boundary**/population/route_ids) — every one is an official municipal polygon, see `../../data/README.md` |
+| `stops.json` | The city's 1,069 survey stops: boardings/day and by time band, scheduled calls, transfer share, rider mix, the GTFS lines calling there, the neighbourhood each stands in (`neighbourhood`) and every neighbourhood each *serves* (`neighbourhoods`, its 250 m catchments — 852 of the 1,069 serve more than one). Fetched lazily on first toggle of the תחנות ועליות layer |
+| `neighbourhoods.json` | Index of the 71 selectable neighbourhoods (id/name/bbox/**boundary**/**analysis_boundary**/population/route_ids) — every one is an official municipal polygon, see `../../data/README.md` |
 | `neighbourhood_routes.json` | Shared route lookup (shape + stops) referenced by `neighbourhoods.json`, fetched lazily on first use |
 
-The "קווי אוטובוס באזור" sidebar list is driven entirely by whichever neighbourhood is selected in
-the dropdown at the top (no neighbourhood selected on load) — there is no separate hardcoded route
-list, and the dropdown itself is filled from `neighbourhoods.json`.
+### Selecting an area
 
-It is split into **עירוני** and **בין-עירוני** sections, urban first, each sorted by line number.
-Nothing in the feed flags a line as one or the other, so `src/core/routeKind.js` derives it from the
-MOT's strictly formatted `route_long_name`, which carries both endpoint cities:
+Any number of neighbourhoods can be selected at once, from the filterable checkbox list at the top
+of the sidebar (none selected on load = the whole city). The selection drives everything: the KPI
+tiles, the map layers, the route list, the population block. Selecting several is the normal case —
+a corridor or a service gap rarely respects one boundary.
 
-```
-<origin stop>-<origin city><-><destination stop>-<destination city>-<direction code>
-מסוף עתידים-תל אביב יפו<->ת. רכבת אוניברסיטה/הורדה-תל אביב יפו-11     ← urban
-מסוף כרמלית/הכרמל-תל אביב יפו<->מסוף קדמה-רמת השרון-11                 ← intercity
-```
+Two polygons come out of the pipeline per neighbourhood, and the dashboard is careful about which
+one it uses for what:
 
-A line is urban when **both** endpoints are `HOME_CITY` (Tel Aviv-Yafo). Same-city-elsewhere lines
-are deliberately not urban: Holon's internal 4/5/6 and the 800-series park-and-ride shuttles (both
-ends חניון שפיים) pass through the city but are not Tel Aviv urban lines. All 700 routes in the
-index parse, and the urban set comes out as the recognisable internal network (2–16, 31, 44, 52, 54,
-79, 80, 114, 6א). Because this reads a string rather than a real field, the sturdier long-term home
-for the flag is the pipeline — see the note in that module.
+- **`boundary`** — the official municipal polygon. Drawn as the firm dashed outline, and the area
+  the **population** figure is apportioned into. Selecting several adds their populations up
+  cleanly, because official polygons don't overlap.
+- **`analysis_boundary`** — that border grown by `analysis_buffer_m` (**250 m**), drawn as the faint
+  outer ring. This is the *catchment*, and everything about service is measured against it: which
+  stops, which routes, which stations' boardings, and which segments the layers keep on screen. A
+  stop on the far kerb of the street that is the border serves the neighbourhood, and an
+  administrative line shouldn't say otherwise.
+
+Because catchments overlap, the boardings tile sums the **stations** in the selection rather than
+adding up the neighbourhoods' pre-computed `transit` blocks — a station serving two selected
+neighbourhoods must count once. (For נוה צדק + פלורנטין + שפירא, the block sum is 60,154/day against
+a true 51,629.) That's why picking two or more neighbourhoods pulls `stops.json` in even with the
+stop layer off.
+
+### Urban vs. intercity
+
+The route list is split into **עירוני** and **בין-עירוני** sections, urban first, each sorted by
+line number. The feed flags neither, so `src/core/routeKind.js` classifies on the line number
+itself: **1–99 urban, 100 and above intercity**, which is how the numbering is allocated in
+practice. A suffixed number follows its numeric part (6א urban, 240א intercity). Across the 717
+routes in the index the split is 203 urban (topping out at 96) and 514 intercity (starting at 101).
 
 ## Development
 
@@ -164,7 +176,7 @@ This command will automatically build the project and push the `dist/` folder to
 ## Features
 - **Speed Heatmaps**: Visualizes bus speeds across road segments at different times of the day.
 - **Congestion Analysis**: Highlights bottlenecks where average bus speeds drop below 15 km/h.
-- **Neighbourhood Route Browser**: Pick any of the 71 official Tel Aviv neighbourhoods and see its real bus routes — the boundary drawn on the map and the "קווי אוטובוס בשכונה" list both update together, and clicking a route draws its path/stops. The top KPI tiles (avg speed / % congested / segment count) are scoped to whichever neighbourhood is selected — a point-in-polygon test against its official boundary — and fall back to city-wide numbers when no neighbourhood is selected.
+- **Neighbourhood Route Browser**: Pick any number of the 71 official Tel Aviv neighbourhoods and see the real bus routes serving them — the boundaries drawn on the map and the "קווי אוטובוס באזור" list update together, lines serving several of the picked areas appear once, and clicking a route draws its path/stops. The top KPI tiles (avg speed / % congested / segment count / boardings) are scoped to the selection — a point-in-polygon test against each neighbourhood's 250 m analysis catchment — and fall back to city-wide numbers when nothing is selected.
 - **Stops & Boardings** (`תחנות ועליות`): Every surveyed stop in the city, sized by area in proportion to daily boardings and coloured on a five-class quantile ramp recomputed from whatever is on screen — so the classes stay informative inside a single neighbourhood, not just city-wide. Clicking one opens the left panel: boardings/day, scheduled calls, transfer share, the lines calling there, boardings by time band with the peak marked, and the rider mix. Stops the survey never covered draw as a hollow ring and say so; they are never shown as zero. The panel's ↩ link rolls the same figures up over everything currently visible.
 - **Dark & Light Mode**: Adapts dynamically based on user preference.
 

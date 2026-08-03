@@ -4,14 +4,22 @@
  * Every figure comes from data/stops.json, generated out of the תלת״ן station
  * survey joined to GTFS for the line numbers. Nothing here invents a number: a
  * station the survey never covered renders as "no survey data", never as zero.
+ *
+ * The layer follows the time cut as well as the area filter: pick a period (or
+ * press הרצת יום and let it step through all seven) and every dot is resized,
+ * recoloured and re-classified on that window's boardings, so the morning peak
+ * and the late evening are visibly different networks rather than one static
+ * daily picture. The survey is a weekday average, so the day pills א׳–ה׳ move
+ * the speed network but correctly leave the stops alone.
  */
 
 import { setLayerVisible } from '../core/map.js';
 import { state } from '../core/store.js';
 import { pointInArea } from '../core/geo.js';
 import { data } from '../core/data.js';
+import { bandWeights, boardingsFor } from '../core/boardings.js';
 import { stopRamp, mapColors } from '../core/palette.js';
-import { fmtNum, escHtml } from '../core/format.js';
+import { fmtNum, escHtml, periodLabel } from '../core/format.js';
 
 export const stopsLayer = L.layerGroup();
 
@@ -22,7 +30,25 @@ export const stopsState = {
   visible: [],   // stations passing the current area filter
   breaks: [],    // colour-class upper bounds, recomputed from the visible stations
   selected: null,
+  weights: null, // band→period weights for the current cut, null for the whole day
 };
+
+/**
+ * What the layer is drawing for a station right now: its boardings in the
+ * selected period, or its daily total when no period is selected.
+ *
+ * Exported because the legend and the roll-up panel describe this same layer,
+ * and reading a second figure out of the station record would let them drift
+ * from the dots on the map.
+ */
+export function valueFor(station) {
+  return boardingsFor(station, stopsState.weights);
+}
+
+/** Caption for whatever `valueFor` is currently returning. */
+export function valueLabel() {
+  return state.period === 'all' ? 'עליות ליום' : `עליות · ${periodLabel(state.period)}`;
+}
 
 export function stopKey(s) {
   return `${s.code}@${s.lat},${s.lon}`;
@@ -40,7 +66,7 @@ export function setSelectHandler(fn) {
  * in the lowest colour and waste the ramp.
  */
 function computeBreaks(stations) {
-  const vals = stations.map(s => s.boardings_day).filter(v => v != null).sort((a, b) => a - b);
+  const vals = stations.map(valueFor).filter(v => v != null).sort((a, b) => a - b);
   if (!vals.length) return [];
   const ramp = stopRamp();
   return Array.from({ length: ramp.length - 1 },
@@ -72,19 +98,27 @@ export function render() {
   stopsState.visible = data.stops.stations.filter(
     s => !state.area || pointInArea(s.lat, s.lon, state.area)
   );
+
+  // The time cut, resolved once per render: which survey bands feed the selected
+  // period, and in what proportion. Everything below reads through valueFor.
+  stopsState.weights = bandWeights(data.stops.bands, state.period);
   stopsState.breaks = computeBreaks(stopsState.visible);
 
-  const max = stopsState.visible.reduce((m, s) => Math.max(m, s.boardings_day || 0), 0);
+  // Classes and radii are rescaled to the period on screen, not to the daily
+  // maximum. A quiet late evening should read as a quiet evening's own spread of
+  // busy and empty stops, not as a city where every dot has gone dark.
+  const max = stopsState.visible.reduce((m, s) => Math.max(m, valueFor(s) || 0), 0);
   const colors = mapColors();
   // Un-surveyed stops stay hollow; surveyed ones get a hairline in the
   // basemap's own colour so overlapping dots stay countable.
   const hollowRing = colors.empty;
 
   for (const s of stopsState.visible) {
-    const fill = colorFor(s.boardings_day);
+    const value = valueFor(s);
+    const fill = colorFor(value);
     const marker = L.circleMarker([s.lat, s.lon], {
       pane: 'pointPane',
-      radius: radiusFor(s.boardings_day, max),
+      radius: 2*radiusFor(value, max),
       color: fill ? colors.hairline : hollowRing,
       weight: fill ? 1 : 1.5,
       fillColor: fill || 'transparent',
@@ -94,9 +128,16 @@ export function render() {
     marker._stroke = fill ? colors.hairline : hollowRing;
     marker._weight = fill ? 1 : 1.5;
 
+    // Under a period cut the tooltip names the window and keeps the daily total
+    // beside it, so a dot that just shrank can be read against what it was.
     marker.bindTooltip(
       `<div dir="rtl" style="text-align:right"><b>${escHtml(s.name)}</b><br>` +
-      (s.boardings_day != null ? `${fmtNum(s.boardings_day)} עליות ביום` : 'ללא נתוני סקר') +
+      (value == null
+        ? 'ללא נתוני סקר'
+        : stopsState.weights
+          ? `${fmtNum(value)} עליות · ${escHtml(periodLabel(state.period))}<br>` +
+            `<span style="opacity:.7">${fmtNum(s.boardings_day)} עליות ביום</span>`
+          : `${fmtNum(value)} עליות ביום`) +
       '</div>',
       { direction: 'top', opacity: 0.95 }
     );

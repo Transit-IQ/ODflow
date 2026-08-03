@@ -4,7 +4,7 @@ import { state, setState, notify } from '../../core/store.js';
 import { DEST_FAMILIES, destFamilyColor, stopRamp } from '../../core/palette.js';
 import { data } from '../../core/data.js';
 import { colorOf, familyOf } from '../../layers/destinations.js';
-import { stopsState } from '../../layers/stops.js';
+import { stopsState, valueLabel } from '../../layers/stops.js';
 import { fmtNum, escHtml } from '../../core/format.js';
 
 /**
@@ -16,7 +16,7 @@ import { fmtNum, escHtml } from '../../core/format.js';
 const LAYERS = [
   { key: 'speed', label: 'רשת מהירויות אוטובוס',   tint: 'var(--ramp)',   swatch: null },
   { key: 'cong',  label: 'מוקדי גודש (&lt;15 קמ״ש)', tint: 'var(--c-cong)', swatch: 'background:var(--sp1)' },
-  { key: 'dest',  label: 'מוקדי שירות ותעסוקה',     tint: 'var(--c-place)', swatch: 'multi' },
+  { key: 'dest',  label: 'מוקדי עניין',     tint: 'var(--c-place)', swatch: 'multi' },
   { key: 'stops', label: 'תחנות ועליות',            tint: 'var(--c-ride)', swatch: 'background:var(--primary)' },
 ];
 
@@ -87,6 +87,9 @@ export function LayerToggles() {
     if (!data.stops) return;
     const ramp = stopRamp();
     const surveyed = stopsState.visible.filter(s => s.boardings_day != null).length;
+    // The classes are recomputed per time cut, so the title has to say which cut
+    // they describe — the same ramp means different numbers at 08:00 and at 22:00.
+    const title = valueLabel();
 
     const rows = ramp.map((c, i) => {
       const lo = i === 0 ? 0 : stopsState.breaks[i - 1];
@@ -96,7 +99,7 @@ export function LayerToggles() {
     }).join('');
 
     legendEl.innerHTML = `
-      <div class="stops-legend-title">עליות ליום · ${fmtNum(surveyed)} תחנות עם נתוני סקר</div>
+      <div class="stops-legend-title">${escHtml(title)} · ${fmtNum(surveyed)} תחנות עם נתוני סקר</div>
       ${rows}
       <div class="lg"><span class="lg-hollow"></span> ללא נתוני סקר</div>
       <div class="stops-legend-note">גודל העיגול ביחס למספר העליות</div>`;

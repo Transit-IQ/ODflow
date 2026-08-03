@@ -15,6 +15,13 @@ const RIDER_LABELS = {
   STUDENT: 'סטודנט', DISABLED: 'נכה', OTHER: 'אחר',
 };
 
+/** Which area this roll-up covers, naming the one neighbourhood when there is one. */
+function scopeLabel() {
+  const picked = state.areaRecords;
+  if (!picked.length) return 'ברחבי העיר';
+  return picked.length === 1 ? `ב${picked[0].name}` : `ב-${fmtNum(picked.length)} שכונות נבחרות`;
+}
+
 function tile(value, label, accent) {
   return `<div class="stop-tile">
             <div class="stop-tile-val"${accent ? ` style="color:${accent}"` : ''}>${value}</div>
@@ -137,18 +144,22 @@ export function StopPanel() {
       surveyed.reduce((a, s) => a + (s.boardings_by_band ? s.boardings_by_band[i] : 0), 0));
     const riderTotals = data.stops.rider_types.map((_, i) =>
       surveyed.reduce((a, s) => a + (s.riders ? s.riders[i] : 0), 0));
-    const boardings = surveyed.reduce((a, s) => a + s.boardings_day, 0);
-    const top = [...surveyed].sort((a, b) => b.boardings_day - a.boardings_day).slice(0, 5);
+    // The headline and the "busiest stops" list follow the time cut, because
+    // this panel describes the dots currently on the map — under a period cut
+    // the busiest five are the busiest five *then*, which is the whole point of
+    // stepping through the day.
+    const boardings = surveyed.reduce((a, s) => a + stops.valueFor(s), 0);
+    const top = [...surveyed].sort((a, b) => stops.valueFor(b) - stops.valueFor(a)).slice(0, 5);
 
     return `
       <div class="stop-head">
         <button class="stop-close" title="סגירה">✕</button>
-        <div class="stop-title">סקירת תחנות · ${state.area ? 'בשכונה הנבחרת' : 'ברחבי העיר'}</div>
+        <div class="stop-title">סקירת תחנות · ${scopeLabel()}</div>
         <div class="stop-sub">${fmtNum(stops.stopsState.visible.length)} תחנות · ${fmtNum(surveyed.length)} עם נתוני סקר</div>
       </div>
 
       <div class="stop-tiles">
-        ${tile(fmtNum(boardings), 'עליות ביום', 'var(--primary)')}
+        ${tile(fmtNum(boardings), stops.valueLabel(), 'var(--primary)')}
         ${tile(fmtNum(surveyed.reduce((a, s) => a + (s.departures_day || 0), 0)), 'עצירות ביום')}
       </div>
 
@@ -163,7 +174,7 @@ export function StopPanel() {
         ${top.map(s => `
           <button class="stop-top-row" data-key="${escHtml(stops.stopKey(s))}">
             <span class="stop-top-name">${escHtml(s.name)}</span>
-            <span class="stop-top-val">${fmtNum(s.boardings_day)}</span>
+            <span class="stop-top-val">${fmtNum(stops.valueFor(s))}</span>
           </button>`).join('')}
       </div>
       <div class="stop-src">${escHtml(data.stops.source)}</div>`;

@@ -3,8 +3,11 @@ Loader for the Tel Aviv-Yafo municipal open-data layers under ``data/municipal/`
 
 Every layer the municipality publishes ships as an ITM (EPSG:2039) shapefile *and* a
 KML. KML is WGS-84 by definition, so this module reads the KML and needs no coordinate
-conversion at all — nothing here touches ``gis_loader._itm_transformer``, which is the
-only path on which the ~78 m datum-shift bug documented there is reachable.
+conversion to load anything — nothing here goes near ``gis_loader``'s hand-rolled ITM
+math, the only path on which the ~78 m datum-shift bug documented there was reachable.
+The one projection this module does perform (:func:`buffer_metres`, which needs metres
+rather than degrees) goes through pyproj in both directions, same as
+``services.analysis.buffer_layer``.
 
 The source files are read directly; there are no pre-generated intermediates. Layers:
 
@@ -30,13 +33,30 @@ import re
 from pathlib import Path
 from typing import Optional
 
+import pyproj
 from shapely.geometry import mapping, shape
-from shapely.ops import unary_union
+from shapely.ops import transform as shapely_transform, unary_union
 
 from paths import DATA_DIR
 
 MUNICIPAL_DIR = DATA_DIR / "municipal"
 DESTINATIONS_DIR = MUNICIPAL_DIR / "destinations"
+
+# How far past a neighbourhood's official border still counts as serving it, in
+# metres — a walking distance (150 m is a two-minute walk).
+#
+# A municipal boundary is an administrative line, not a travel one: a stop on the
+# far kerb of the street that *is* the border serves the neighbourhood exactly as
+# much as one on the near kerb, and a station just outside the line is often the
+# main one residents actually use. So the routes/stations analysis runs on the
+# border grown by this much, while the resident counts and the drawn outline stay
+# on the official polygon.
+#
+# This is the only place the distance is written down: it ships to the frontend on
+# every neighbourhood record as `analysis_buffer_m`, and the dashboard reads its
+# labels from there. Changing it here and re-running the pipeline is the whole
+# change — but it *does* need the re-run, or the JSON keeps the old catchments.
+ANALYSIS_BUFFER_M = 150
 
 
 def _find_layer_kml(shapefile_stem: str) -> Optional[Path]:
@@ -244,6 +264,40 @@ def build_boundaries(neighbourhoods_config: list) -> dict[str, dict]:
             f"{NEIGHBOURHOODS_KML}: {', '.join(missing)}"
         )
     return boundaries
+
+
+# ── Analysis buffer ───────────────────────────────────────────────────────────
+
+# Buffering has to happen in a projected CRS: a degree of longitude is ~94 km at
+# this latitude and a degree of latitude ~111 km, so buffering the WGS-84
+# coordinates directly would stretch the ring by ~18% in one axis. EPSG:2039 is
+# the national grid these layers are published on, and is metric.
+_TO_ITM = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2039", always_xy=True).transform
+_FROM_ITM = pyproj.Transformer.from_crs("EPSG:2039", "EPSG:4326", always_xy=True).transform
+
+
+def buffer_metres(geom, metres: float = ANALYSIS_BUFFER_M):
+    """Grow a WGS-84 geometry outwards by ``metres``, returning WGS-84."""
+    return shapely_transform(_FROM_ITM, shapely_transform(_TO_ITM, geom).buffer(metres))
+
+
+def build_analysis_boundaries(
+    boundaries: dict[str, dict], metres: float = ANALYSIS_BUFFER_M
+) -> dict[str, dict]:
+    """
+    The catchment polygons the transit analysis actually runs against: each
+    official boundary from :func:`build_boundaries`, grown outwards by ``metres``.
+
+    Kept as a separate mapping rather than replacing ``boundaries`` because the two
+    answer different questions and must not be confused. The official polygon is
+    what the neighbourhood *is* — what gets drawn, and what residents are counted
+    inside. The buffered one is what it is *served by*, and the only thing stops,
+    routes and stations are tested against.
+    """
+    return {
+        nid: mapping(buffer_metres(shape(geom), metres))
+        for nid, geom in boundaries.items()
+    }
 
 
 # ── Population ────────────────────────────────────────────────────────────────

@@ -60,20 +60,55 @@ export function KpiBar() {
     },
 
     /**
-     * Daily boardings. Reads the area's own pre-computed `transit` block when
-     * one is selected and the city total otherwise — both produced by the same
-     * pipeline summary function, so the tile matches the stop panel's roll-up.
+     * Daily boardings for the current selection, or for the whole city when
+     * nothing is selected.
+     *
+     * `stations` is the list the map is drawing under the same area filter, and
+     * it is the preferred source: neighbourhood catchments overlap (a station a
+     * short walk from two borders serves both), so adding up the neighbourhoods'
+     * pre-computed `transit` blocks would count those stations once per
+     * neighbourhood. Summing the stations themselves counts each exactly once.
+     *
+     * The pre-computed block is used only as the immediate figure for a single
+     * neighbourhood, where it is identical to the station sum, so the tile shows
+     * a real number before the (lazily fetched) stop file has landed.
      */
-    setRidership(neigh, cityTotals) {
-      if (neigh?.transit) {
-        value('board').textContent = fmtNum(neigh.transit.boardings_day);
-        note('board').textContent = `${fmtNum(neigh.transit.surveyed)} תחנות · ${neigh.name}`;
-      } else if (neigh) {
+    setRidership(neighs, cityTotals, stations = null) {
+      const picked = neighs || [];
+
+      if (!picked.length) {
+        if (cityTotals) {
+          value('board').textContent = fmtNum(cityTotals.boardings_day);
+          note('board').textContent = `${fmtNum(cityTotals.surveyed)} תחנות מסוקרות · כל העיר`;
+        }
+        return;
+      }
+
+      const scope = picked.length === 1 ? picked[0].name : `${fmtNum(picked.length)} שכונות`;
+
+      if (stations) {
+        const surveyed = stations.filter(s => s.boardings_day != null);
+        if (!surveyed.length) {
+          value('board').textContent = '—';
+          note('board').textContent = `אין תחנות מסוקרות ב${scope}`;
+          return;
+        }
+        value('board').textContent = fmtNum(surveyed.reduce((a, s) => a + s.boardings_day, 0));
+        note('board').textContent = `${fmtNum(surveyed.length)} תחנות · ${scope}`;
+        return;
+      }
+
+      if (picked.length === 1 && picked[0].transit) {
+        value('board').textContent = fmtNum(picked[0].transit.boardings_day);
+        note('board').textContent = `${fmtNum(picked[0].transit.surveyed)} תחנות · ${scope}`;
+      } else if (picked.length === 1) {
         value('board').textContent = '—';
-        note('board').textContent = `אין תחנות מסוקרות ב${neigh.name}`;
-      } else if (cityTotals) {
-        value('board').textContent = fmtNum(cityTotals.boardings_day);
-        note('board').textContent = `${fmtNum(cityTotals.surveyed)} תחנות מסוקרות · כל העיר`;
+        note('board').textContent = `אין תחנות מסוקרות ב${scope}`;
+      } else {
+        // Several neighbourhoods and no station file yet: any figure printed here
+        // would be the over-count described above, so the tile waits instead.
+        value('board').textContent = '…';
+        note('board').textContent = scope;
       }
     },
   };

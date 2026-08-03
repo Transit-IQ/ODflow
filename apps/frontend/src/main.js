@@ -25,7 +25,7 @@ import * as destinations from './layers/destinations.js';
 import * as stops from './layers/stops.js';
 import * as routes from './layers/routes.js';
 import * as imported from './layers/imported.js';
-import { cityBorderLayer, drawCityBorder, highlightArea, clearHighlight } from './layers/boundary.js';
+import { cityBorderLayer, drawCityBorder, highlightAreas, clearHighlight } from './layers/boundary.js';
 
 import { Header } from './components/Header/index.js';
 import { KpiBar } from './components/KpiBar/index.js';
@@ -101,17 +101,38 @@ function applyLayerVisibility() {
 
   if (state.layers.stops) {
     loadStops()
-      .then(() => { stops.render(); layerToggles.renderStopsLegend(); })
+      .then(() => { stops.render(); layerToggles.renderStopsLegend(); refreshRidership(); })
       .catch(e => console.error('[Stops] failed to load:', e));
   } else {
     stopPanel.close();
   }
 }
 
+/**
+ * Boardings for the current selection. The station list the map is drawing is
+ * passed through whenever it's loaded, because neighbourhood catchments overlap
+ * and only a per-station sum counts a shared border station once — see
+ * KpiBar.setRidership.
+ */
+function refreshRidership() {
+  const stations = data.stops && state.areaRecords.length ? stops.stopsState.visible : null;
+  kpis.setRidership(state.areaRecords, data.stopTotals, stations);
+}
+
 subscribe((s, changed) => {
   if (changed.has('day') || changed.has('period')) {
     timeFilter.sync();
     refreshSpeed();
+  }
+
+  // The stop layer is classified on the selected window's boardings, so a period
+  // step — including every tick of הרצת יום — has to redraw it. `day` is left out
+  // on purpose: the station survey is a weekday average and has nothing to say
+  // about א׳ vs ה׳, so redrawing on a day pill would only fake a change.
+  if (changed.has('period') && data.stops) {
+    stops.render();
+    layerToggles.renderStopsLegend();
+    stopPanel.refresh();
   }
 
   if (changed.has('layers')) applyLayerVisibility();
@@ -128,17 +149,26 @@ subscribe((s, changed) => {
       layerToggles.renderStopsLegend();
       stopPanel.refresh();
     }
-    kpis.setRidership(s.areaRecord, data.stopTotals);
+    refreshRidership();
+
+    // More than one neighbourhood picked and the station file not fetched yet:
+    // its per-station figures are the only way to add up overlapping catchments
+    // without double-counting, so pull it in even with the stop layer off.
+    if (!data.stops && s.areaRecords.length > 1) {
+      loadStops()
+        .then(() => { stops.render(); refreshRidership(); })
+        .catch(e => console.error('[Stops] failed to load for the area roll-up:', e));
+    }
   }
 });
 
-/** An area was picked (or cleared) in the sidebar: move and outline the map. */
-function handleAreaChange(neigh) {
-  if (!neigh) {
+/** The selection changed in the sidebar: move and outline the map. */
+function handleAreaChange(neighs) {
+  if (!neighs?.length) {
     clearHighlight();
     return;
   }
-  const bounds = highlightArea(neigh);
+  const bounds = highlightAreas(neighs);
   if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
 }
 
@@ -156,7 +186,7 @@ onTheme(() => {
   refreshSpeed();
   timeFilter.buildSpark();
   drawCityBorder(data.border);
-  if (state.areaRecord) highlightArea(state.areaRecord);
+  if (state.areaRecords.length) highlightAreas(state.areaRecords);
   routes.refresh();
   areaPanel.renderRoutes();
   imported.refresh();
@@ -181,7 +211,7 @@ async function start() {
   speed.build();
   timeFilter.buildSpark();
   refreshSpeed();
-  kpis.setRidership(null, data.stopTotals);
+  refreshRidership();
   applyLayerVisibility();
 
   if (segmentsFailed) kpis.setSegmentError('שגיאת נתונים');

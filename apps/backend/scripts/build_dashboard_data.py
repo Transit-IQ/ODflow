@@ -112,7 +112,7 @@ def _route_sort_key(name: str):
     return (0, int(name), "") if name.isdigit() else (1, 0, name)
 
 
-def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
+def build_stops(idx: dict, city_polygon, boundaries: dict, analysis_boundaries: dict) -> dict:
     """
     Survey stations inside the city, each joined to the bus lines that actually call
     there and to the neighbourhood it stands in.
@@ -122,6 +122,17 @@ def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
     sources share. Both figures are kept: a disagreement between "the survey counted
     3" and "GTFS lists 2 today" is real information about how current each source is,
     and silently dropping one would hide it.
+
+    Two different neighbourhood links come out of this, because a station has two
+    different relationships to a neighbourhood:
+
+    ``neighbourhood``
+        the one whose official polygon the station physically stands in, or None.
+        Exactly one by construction, since the municipal polygons don't overlap.
+    ``neighbourhoods``
+        every neighbourhood the station *serves* — within the
+        ``ANALYSIS_BUFFER_M`` catchment. Several, near a border, and that is the
+        point: one station can be the useful station for both sides of a street.
     """
     data = taltan_loader.load_stations(city_polygon)
     stops_df = idx["stops"]
@@ -140,6 +151,7 @@ def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
                 routes_by_code.setdefault(code, set()).add(short)
 
     prepared = {nid: prep(shape(geom)) for nid, geom in boundaries.items()}
+    prepared_catchment = {nid: prep(shape(geom)) for nid, geom in analysis_boundaries.items()}
 
     matched = 0
     for station in data["stations"]:
@@ -151,6 +163,9 @@ def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
         station["neighbourhood"] = next(
             (nid for nid, poly in prepared.items() if poly.contains(point)), None
         )
+        station["neighbourhoods"] = [
+            nid for nid, poly in prepared_catchment.items() if poly.contains(point)
+        ]
 
     data["totals"] = taltan_loader.summarise(
         data["stations"], len(data["bands"]), len(data["rider_types"])
@@ -164,9 +179,9 @@ def build_stops(idx: dict, city_polygon, boundaries: dict) -> dict:
     return data
 
 
-def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict, statistical_areas: list | None = None, stops_data: dict | None = None) -> dict:
+def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config: list, boundaries: dict, analysis_boundaries: dict, statistical_areas: list | None = None, stops_data: dict | None = None) -> dict:
     """
-    For every neighbourhood, find routes with a stop inside its area and attach
+    For every neighbourhood, find routes with a stop inside its catchment and attach
     each route's best shape + stop list. Routes are deduplicated into a shared
     `routes` dict since many lines cross multiple neighbourhoods.
 
@@ -174,6 +189,20 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
     data/municipal/neighbourhoods/, so stop matching is always a real
     point-in-polygon test (the bbox is only a pre-filter for candidate stops),
     and the bbox/centre reported to the frontend are measured off that polygon.
+
+    Two polygons per neighbourhood go out to the frontend, and which one a figure
+    is computed from is a deliberate choice in each case:
+
+    ``boundary``/``bbox``
+        the official municipal polygon. Drawn on the map, used as the zoom
+        target, and the denominator for **population** — residents belong to the
+        neighbourhood they live in, and apportioning from a buffered polygon
+        would credit each neighbourhood with its neighbours' people.
+    ``analysis_boundary``/``analysis_bbox``
+        that polygon grown by ``ANALYSIS_BUFFER_M``. Everything about *service*
+        is measured against it — which stops, which routes, which stations'
+        ridership — and the frontend filters its layers by it, so the map shows
+        the same catchment the numbers were computed from.
     """
     stops_df = idx["stops"]
     routes_df = idx["routes"]
@@ -192,19 +221,31 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
             # being derived and the boundaries being built.
             raise RuntimeError(f"no official boundary for neighbourhood {n['id']}")
 
-        # bbox and centre are measured off the official polygon: the bbox is the
-        # polygon's own bounds (used as the cheap candidate-stop pre-filter, and
-        # as the frontend's zoom target), the centre a guaranteed-interior point.
+        catchment_geom_json = analysis_boundaries.get(n["id"])
+        if not catchment_geom_json:
+            raise RuntimeError(f"no analysis catchment for neighbourhood {n['id']}")
+
+        # bbox and centre are measured off the official polygon (the frontend's
+        # zoom target and label anchor); the catchment's own bounds are what
+        # pre-filters candidate stops, since a stop just outside the official
+        # bbox still has to be reachable by the point-in-polygon test below.
         poly_geom = shape(boundary_geom)
         min_lon, min_lat, max_lon, max_lat = poly_geom.bounds
         b = {"min_lat": min_lat, "max_lat": max_lat, "min_lon": min_lon, "max_lon": max_lon}
         centroid = poly_geom.representative_point()
         center = [centroid.y, centroid.x]
+
+        catchment_geom = shape(catchment_geom_json)
+        c_min_lon, c_min_lat, c_max_lon, c_max_lat = catchment_geom.bounds
+        catchment_bbox = {
+            "min_lat": c_min_lat, "max_lat": c_max_lat,
+            "min_lon": c_min_lon, "max_lon": c_max_lon,
+        }
         candidate_stops = stops_df[
-            (stops_df["stop_lat"] >= min_lat) & (stops_df["stop_lat"] <= max_lat) &
-            (stops_df["stop_lon"] >= min_lon) & (stops_df["stop_lon"] <= max_lon)
+            (stops_df["stop_lat"] >= c_min_lat) & (stops_df["stop_lat"] <= c_max_lat) &
+            (stops_df["stop_lon"] >= c_min_lon) & (stops_df["stop_lon"] <= c_max_lon)
         ]
-        polygon = prep(poly_geom)
+        polygon = prep(catchment_geom)
         inside_stop_ids = {
             sid for sid, row in candidate_stops.iterrows()
             if polygon.contains(Point(row["stop_lon"], row["stop_lat"]))
@@ -261,12 +302,17 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
         if statistical_areas:
             population = municipal_loader.population_for(poly_geom, statistical_areas)
 
-        # Ridership for the stations standing in this neighbourhood, summed from the
-        # same station records the map draws — no second, separately-derived figure
-        # that could disagree with the stop layer.
+        # Ridership for the stations serving this neighbourhood — the catchment, not
+        # the official polygon, so it matches the routes listed above and the dots the
+        # map draws under the same filter. Summed from the same station records the
+        # map draws, so there's no second, separately-derived figure to disagree with
+        # the stop layer. A station in two catchments counts towards both: these are
+        # per-neighbourhood service figures, not a partition of the city's boardings,
+        # and summing several neighbourhoods' `transit` blocks will over-count the
+        # shared border stations (the frontend sums the stations, not the blocks).
         transit = None
         if stops_data:
-            mine = [s for s in stops_data["stations"] if s.get("neighbourhood") == n["id"]]
+            mine = [s for s in stops_data["stations"] if n["id"] in s.get("neighbourhoods", ())]
             if mine:
                 transit = taltan_loader.summarise(
                     mine, len(stops_data["bands"]), len(stops_data["rider_types"])
@@ -274,6 +320,8 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
 
         neighbourhoods_result.append({
             **n, "bbox": b, "center": center, "boundary": boundary_geom,
+            "analysis_bbox": catchment_bbox, "analysis_boundary": catchment_geom_json,
+            "analysis_buffer_m": municipal_loader.ANALYSIS_BUFFER_M,
             "population": population, "route_ids": n_route_ids, "transit": transit,
         })
         pop = f", {population['total']:,} residents" if population else ""
@@ -299,9 +347,13 @@ def main():
             f"{municipal_loader.NEIGHBOURHOODS_KML or 'data/municipal/neighbourhoods/export.kml'}"
         )
     boundaries = municipal_loader.build_boundaries(neighbourhoods_config)
+    # Service catchments: the same polygons grown outwards, so a stop just across
+    # the border still counts for the neighbourhood it plainly serves.
+    analysis_boundaries = municipal_loader.build_analysis_boundaries(boundaries)
     print(
         f"=== Loaded {len(neighbourhoods_config)} official municipal neighbourhoods "
-        f"from {municipal_loader.NEIGHBOURHOODS_KML.relative_to(ROOT)} ==="
+        f"from {municipal_loader.NEIGHBOURHOODS_KML.relative_to(ROOT)} "
+        f"(analysis catchment: border + {municipal_loader.ANALYSIS_BUFFER_M} m) ==="
     )
 
     destinations = municipal_loader.load_destinations()
@@ -320,7 +372,7 @@ def main():
         print("=== No data/municipal/אזורים סטטיסטים/export.kml — population will be omitted ===")
 
     print("=== Building stop layer from the תלת״ן station survey ===")
-    stops_data = build_stops(idx, shape(gis["border"]["geometry"]), boundaries)
+    stops_data = build_stops(idx, shape(gis["border"]["geometry"]), boundaries, analysis_boundaries)
 
     print("=== Indexing trips by route (for shape/stop lookups) ===")
     trips_by_route = {rid: grp for rid, grp in idx["trips"].groupby("route_id")}
@@ -333,7 +385,7 @@ def main():
     # on, same pattern as neighbourhood_routes.json — keeps initial page load small.
     write_json("destinations.json", destinations)
     write_json("stops.json", stops_data)
-    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries, statistical_areas, stops_data)
+    neighbourhoods_data = build_neighbourhoods(idx, trips_by_route, neighbourhoods_config, boundaries, analysis_boundaries, statistical_areas, stops_data)
     # Split into a small index (fetched eagerly for the dropdown) and a larger
     # shared routes lookup (fetched once, lazily, the first time a
     # neighbourhood is actually selected) — avoids loading several MB of

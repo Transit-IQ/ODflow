@@ -106,6 +106,30 @@ on explicit `ms_shchuna` codes rather than fuzzy names, and still accepts severa
 which is what a caller would need to merge the neighbourhoods this layer splits north/south
 (e.g. 30+31, 33+35).
 
+#### The 250 m analysis catchment
+
+Service is not measured against that boundary directly. `build_analysis_boundaries()` grows each
+polygon outwards by `municipal_loader.ANALYSIS_BUFFER_M` = **250 m** (projected through EPSG:2039,
+since a metre is not a degree), and *that* is what stops, routes and stations are tested against.
+A municipal boundary is an administrative line, not a travel one: the stop on the far kerb of the
+street that forms the border serves the neighbourhood exactly as much as the one on the near kerb,
+and the station just outside the line is often the one residents actually use. 250 m is roughly a
+three-minute walk.
+
+Both polygons ship to the frontend — `boundary` (official) and `analysis_boundary` (catchment) —
+because they answer different questions and mixing them up would be a real error:
+
+| Figure | Measured against | Why |
+|---|---|---|
+| `population` | official boundary | Residents belong to the neighbourhood they live in. Apportioning from a buffered polygon would credit each area with its neighbours' people, and the 71 figures would no longer sum to the city. |
+| `route_ids`, `transit`, every map layer's area filter | catchment | These are questions about *service*, which crosses the line. |
+
+Catchments overlap by design — 852 of the 1,069 survey stations fall inside more than one — so each
+station carries both `neighbourhood` (the one polygon it physically stands in) and `neighbourhoods`
+(every catchment it serves). Per-neighbourhood `transit` blocks are therefore **not a partition** of
+the city's boardings and must not be added together; anything summing over several neighbourhoods
+has to sum the stations instead, which is what the dashboard's boardings tile does.
+
 ### `אזורים סטטיסטים/`
 
 184 CBS (למ״ס) statistical areas, 2022, carrying `sum_pop_all` plus nine age bands
@@ -116,7 +140,8 @@ Total across the layer is 463,569 residents, which matches Tel Aviv-Yafo's publi
 
 Population per neighbourhood is derived by **areal interpolation** in
 `services/municipal_loader.population_for()`: each statistical area contributes population in
-proportion to how much of it falls inside the neighbourhood polygon. This assumes uniform density
+proportion to how much of it falls inside the neighbourhood's **official** polygon — not the 250 m
+catchment above, which overlaps its neighbours. This assumes uniform density
 within a single statistical area — the standard assumption, and a reasonable one here since CBS
 areas are drawn to be internally homogeneous and are small relative to a neighbourhood. 63 of the 71
 neighbourhoods come out with a population; the other 8 (the port, the fairgrounds, two parks, the
