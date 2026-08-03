@@ -9,9 +9,11 @@ export const state = {
   period: 'all',               // 0..6 for P1..P7, or 'all'
   layers: { speed: true, cong: false, dest: false, stops: false },
   destCats: null,              // Set of enabled destination category ids, null = all
-  area: null,                  // { bbox, boundary } of the selected neighbourhood, or null
-  areaName: null,              // its Hebrew name, for KPI captions
-  areaRecord: null,            // the full neighbourhood record (population, transit blocks)
+  // The area filter is a selection of zero or more neighbourhoods. Empty means
+  // the whole city — no filtering — which is what the dashboard opens on.
+  area: null,                  // combined { bbox, boundary } of the selection, or null
+  areaName: null,              // caption for the KPI strip: one name, or "N שכונות"
+  areaRecords: [],             // the selected neighbourhood records, in pick order
 };
 
 const listeners = new Set();

@@ -69,3 +69,6 @@ npm run deploy
 
 This builds the site and pushes `apps/frontend/dist/` to the `gh-pages` branch. The backend is not
 deployed anywhere — it's a local development and data-pipeline tool only.
+
+buffer + 250m
+choosing more than one neighourhood
