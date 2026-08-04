@@ -21,6 +21,7 @@ export const data = {
   stops: null,           // { stations, bands, rider_types, source } — lazy
   neighbourhoods: [],    // selectable areas
   routesById: null,      // route_id → route record — lazy
+  roads: null,           // GeoJSON FeatureCollection — lazy
 };
 
 async function getJson(name) {
@@ -99,5 +100,12 @@ export function loadRoutesIndex() {
   return once('routes', async () => {
     data.routesById = await getJson('neighbourhood_routes.json');
     return data.routesById;
+  });
+}
+
+export function loadRoads() {
+  return once('roads', async () => {
+    data.roads = await getJson('roads.geojson');
+    return data.roads;
   });
 }

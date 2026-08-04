@@ -18,13 +18,14 @@ import { html, $ } from './core/dom.js';
 import { state, subscribe } from './core/store.js';
 import { onTheme } from './core/theme.js';
 import { createMap, map, refreshBasemap, DEFAULT_CENTER } from './core/map.js';
-import { data, loadCore, loadDestinations, loadStops } from './core/data.js';
+import { data, loadCore, loadDestinations, loadStops, loadRoads } from './core/data.js';
 
 import * as speed from './layers/speed.js';
 import * as destinations from './layers/destinations.js';
 import * as stops from './layers/stops.js';
 import * as routes from './layers/routes.js';
 import * as imported from './layers/imported.js';
+import * as roads from './layers/roads.js';
 import { cityBorderLayer, drawCityBorder, highlightArea, clearHighlight } from './layers/boundary.js';
 
 import { Header } from './components/Header/index.js';
@@ -74,8 +75,12 @@ aside.append(areaPanel.el, timeFilter.el, layerToggles.el, speedLegend.el, impor
 
 // ── Layer wiring ─────────────────────────────────────────────────────────────
 cityBorderLayer.addTo(map);
+roads.roadsLayer.addTo(map);
+roads.arrowLayer.addTo(map);
 speed.speedLayer.addTo(map);
 routes.attachTo(map);
+
+map.on('zoomend', () => roads.onZoom());
 
 stops.setSelectHandler(() => stopPanel.render());
 
@@ -91,7 +96,17 @@ function applyLayerVisibility() {
   speed.setVisible(state.layers);
   destinations.setVisible(state.layers.dest);
   stops.setVisible(state.layers.stops);
+  roads.setVisible(state.layers.roads);
   layerToggles.syncPanels();
+
+  if (state.layers.roads && !data.roads) {
+    loadRoads()
+      .then(geojson => {
+        roads.build(geojson);
+        roads.setVisible(state.layers.roads); // re-sync arrows after async build
+      })
+      .catch(e => console.error('[Roads] failed to load:', e));
+  }
 
   if (state.layers.dest) {
     loadDestinations()
@@ -160,6 +175,7 @@ onTheme(() => {
   routes.refresh();
   areaPanel.renderRoutes();
   imported.refresh();
+  if (data.roads) roads.build(data.roads);
   if (data.destinations) { layerToggles.renderCategories(); destinations.render(); }
   if (data.stops) {
     stops.render();

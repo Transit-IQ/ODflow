@@ -34,9 +34,11 @@ const TILES = {
  */
 const PANES = {
   neighHighlightPane: 350,
+  roadPane: 390,          // road network — below speed segments for context
   routeCasingPane: 405,
   routeLinePane: 410,
   pointPane: 420,
+  arrowPane: 422,         // one-way direction arrows — above stop dots
 };
 
 export const DEFAULT_CENTER = [32.08, 34.78];
