@@ -16,6 +16,7 @@ import { fmtNum, escHtml } from '../../core/format.js';
 const LAYERS = [
   { key: 'speed', label: 'רשת מהירויות אוטובוס',   tint: 'var(--ramp)',   swatch: null },
   { key: 'cong',  label: 'מוקדי גודש (&lt;15 קמ״ש)', tint: 'var(--c-cong)', swatch: 'background:var(--sp1)' },
+  { key: 'roads', label: 'רשת דרכים + כיוונים',    tint: '#f9b29c',       swatch: 'background:#f9b29c' },
   { key: 'dest',  label: 'מוקדי שירות ותעסוקה',     tint: 'var(--c-place)', swatch: 'multi' },
   { key: 'stops', label: 'תחנות ועליות',            tint: 'var(--c-ride)', swatch: 'background:var(--primary)' },
 ];

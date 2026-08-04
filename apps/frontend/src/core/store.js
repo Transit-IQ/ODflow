@@ -7,7 +7,7 @@
 export const state = {
   day: 'avg',                  // 0..4 for א׳..ה׳, or 'avg'
   period: 'all',               // 0..6 for P1..P7, or 'all'
-  layers: { speed: true, cong: false, dest: false, stops: false },
+  layers: { speed: true, cong: false, dest: false, stops: false, roads: false },
   destCats: null,              // Set of enabled destination category ids, null = all
   area: null,                  // { bbox, boundary } of the selected neighbourhood, or null
   areaName: null,              // its Hebrew name, for KPI captions
