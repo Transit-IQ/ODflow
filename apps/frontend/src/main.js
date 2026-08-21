@@ -133,6 +133,12 @@ subscribe((s, changed) => {
 
   if (changed.has('destCats') && data.destinations) destinations.render();
 
+  if (changed.has('transferPctMax') && data.stops && s.layers.stops) {
+    stops.render();
+    layerToggles.renderStopsLegend();
+    stopPanel.refresh();
+  }
+
   if (changed.has('area')) {
     speed.computeMembership();
     kpis.setScope(s.areaName);

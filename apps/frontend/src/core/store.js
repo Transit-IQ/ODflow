@@ -12,6 +12,7 @@ export const state = {
   area: null,                  // { bbox, boundary } of the selected neighbourhood, or null
   areaName: null,              // its Hebrew name, for KPI captions
   areaRecord: null,            // the full neighbourhood record (population, transit blocks)
+  transferPctMax: 100,         // maximum % of נסיעות מעבר to display; 100 = no filter
 };
 
 const listeners = new Set();
