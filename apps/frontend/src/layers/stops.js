@@ -68,11 +68,16 @@ export function render() {
   stopsLayer.clearLayers();
   markers.clear();
 
-  // Same area rule the speed and destination layers use.
+  // Area filter drives statistics (legend counts, stop panel roll-up).
   stopsState.visible = data.stops.stations.filter(
     s => !state.area || pointInArea(s.lat, s.lon, state.area)
   );
   stopsState.breaks = computeBreaks(stopsState.visible);
+
+  // Transfer-pct filter only controls which markers appear on the map.
+  const displayed = state.transferPctMax < 100
+    ? stopsState.visible.filter(s => s.transfer_pct == null || s.transfer_pct <= state.transferPctMax)
+    : stopsState.visible;
 
   const max = stopsState.visible.reduce((m, s) => Math.max(m, s.boardings_day || 0), 0);
   const colors = mapColors();
@@ -80,7 +85,7 @@ export function render() {
   // basemap's own colour so overlapping dots stay countable.
   const hollowRing = colors.empty;
 
-  for (const s of stopsState.visible) {
+  for (const s of displayed) {
     const fill = colorFor(s.boardings_day);
     const marker = L.circleMarker([s.lat, s.lon], {
       pane: 'pointPane',
