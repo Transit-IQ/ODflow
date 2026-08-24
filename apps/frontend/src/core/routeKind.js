@@ -1,62 +1,39 @@
 /**
  * Splitting bus lines into urban (עירוני) and intercity (בין-עירוני).
  *
- * The generated route records carry no such flag — GTFS `routes.txt` has no
- * urban/intercity column, and the MOT feed's supplementary cluster file isn't
- * part of the export set. What it does carry is a strictly formatted
- * `route_long_name`:
+ * The classification is the line number itself: 1–99 is urban, 100 and above is
+ * intercity. That is how the numbering is allocated in practice — the two-digit
+ * range is the municipal network, the three-digit range is what leaves the city
+ * — and it is what an analyst reading the list expects a line number to mean.
  *
- *     <origin stop>-<origin city><-><destination stop>-<destination city>-<code>
- *     מסוף עתידים-תל אביב יפו<->ת. רכבת אוניברסיטה/הורדה-תל אביב יפו-11
+ * A suffixed number keeps its numeric part's kind (6א is urban, 240א intercity),
+ * and a name with no leading digits can't be over 99, so it stays urban.
  *
- * so both endpoint cities are recoverable from the string. A line is urban when
- * both ends sit in the city under analysis; anything that leaves it is
- * intercity, which is what עירוני / בין-עירוני mean formally.
- *
- * Checked against the full 700-route index: every name parses, and the urban
- * set comes out as Tel Aviv's recognisable internal network (2–16, 31, 44, 52,
- * 54, 79, 80, 114, 6א). Same-city-but-not-Tel-Aviv lines are deliberately NOT
- * urban here — Holon's internal 4/5/6 and the 800-series park-and-ride shuttles
- * (both ends חניון שפיים) are not Tel Aviv urban lines.
+ * (This replaced an earlier rule that parsed both endpoint cities out of the
+ * MOT `route_long_name` and called a line urban only when both ends were inside
+ * Tel Aviv. It classified more lines as intercity than the numbering does — a
+ * line running from the city to a neighbouring one on a two-digit number came
+ * out intercity — and it depended on a name format the feed is free to change.)
  */
-
-/** The city the dashboard analyses. Changing the study area changes this. */
-export const HOME_CITY = 'תל אביב יפו';
-
-// The trailing token is a direction/alternative code: 10, 20, 11, 1#, 2#, 1ז…
-const DIRECTION_CODE = /^\d+[#֐-׿]?$/;
 
 export const ROUTE_KINDS = [
   { id: 'urban', label: 'עירוני' },
   { id: 'intercity', label: 'בין-עירוני' },
 ];
 
-/** The two endpoint cities of a route, or null when the name doesn't parse. */
-export function endpointCities(longName) {
-  const split = longName ? longName.indexOf('<->') : -1;
-  if (split < 0) return null;
+/** Highest line number still counted as urban. */
+export const URBAN_MAX_LINE = 99;
 
-  const left = longName.slice(0, split);
-  let right = longName.slice(split + 3);
-
-  // Drop the trailing direction code so the city is the last dash-segment.
-  const cut = right.lastIndexOf('-');
-  if (cut > 0 && DIRECTION_CODE.test(right.slice(cut + 1).trim())) {
-    right = right.slice(0, cut);
-  }
-
-  const from = left.slice(left.lastIndexOf('-') + 1).trim();
-  const to = right.slice(right.lastIndexOf('-') + 1).trim();
-
-  return from && to ? [from, to] : null;
+/** The leading digits of a line name, or null when it doesn't start with any. */
+function lineNumber(shortName) {
+  const m = String(shortName ?? '').match(/^\d+/);
+  return m ? Number(m[0]) : null;
 }
 
-/** 'urban' | 'intercity'. An unparseable name is treated as intercity. */
+/** 'urban' | 'intercity', by line number. */
 export function routeKind(route) {
-  const cities = endpointCities(route?.route_long_name);
-  return cities && cities[0] === HOME_CITY && cities[1] === HOME_CITY
-    ? 'urban'
-    : 'intercity';
+  const n = lineNumber(route?.route_short_name);
+  return n != null && n > URBAN_MAX_LINE ? 'intercity' : 'urban';
 }
 
 /**

@@ -29,16 +29,24 @@ const TILES = {
  *   400  speed segments (Leaflet default overlayPane)
  *   405  route casings   ┐ two panes, so EVERY casing lands below EVERY stroke
  *   410  route strokes   ┘ (draw order within one group would not guarantee it)
+ *   418  one-way direction arrows — over the road and route network, under the
+ *        stop dots (see the rule below)
  *   420  points — stops and places, so a corridor never hides the stop that
  *        explains it
+ *
+ * Nothing may be added ABOVE pointPane while it renders to canvas. Leaflet stamps
+ * every canvas renderer container with `_leaflet_disable_events`, so a click is
+ * taken by the topmost canvas, hit-tested against that pane's layers only, and
+ * never falls through — a canvas in a higher pane silently kills clicks on every
+ * canvas below it, across the whole map rather than only where it has geometry.
  */
 const PANES = {
   neighHighlightPane: 350,
   roadPane: 390,          // road network — below speed segments for context
   routeCasingPane: 405,
   routeLinePane: 410,
+  arrowPane: 418,         // one-way direction arrows — see the rule above
   pointPane: 420,
-  arrowPane: 422,         // one-way direction arrows — above stop dots
 };
 
 export const DEFAULT_CENTER = [32.08, 34.78];

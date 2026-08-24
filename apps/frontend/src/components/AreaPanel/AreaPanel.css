@@ -1,6 +1,11 @@
-.neigh-select-wrap { margin-bottom: 8px }
+/* ── The neighbourhood picker ────────────────────────────────────────────
+   A filter box over a scrolling checkbox list, with the current selection
+   repeated as removable chips above it — with ~70 neighbourhoods the picked
+   ones would otherwise be scrolled out of sight the moment you search again. */
 
-.neigh-select {
+.neigh-picker { margin-bottom: 8px }
+
+.neigh-search {
   width: 100%;
   padding: 7px 9px;
   border-radius: var(--radius-sm);
@@ -9,10 +14,75 @@
   color: var(--ink);
   font-size: 12.5px;
   font-family: var(--font-sans);
+}
+
+.neigh-search:hover { border-color: var(--primary) }
+.neigh-search:focus { outline: none; border-color: var(--primary) }
+
+.neigh-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px }
+
+.neigh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--c-place) 14%, transparent);
+  color: var(--ink);
+  font-size: 10.5px;
+  font-family: var(--font-sans);
   cursor: pointer;
 }
 
-.neigh-select:hover { border-color: var(--primary) }
+.neigh-chip:hover { border-color: var(--c-place) }
+.neigh-chip-x { color: var(--ink3); font-size: 9px }
+
+.neigh-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 5px;
+  font-size: 10.5px;
+  color: var(--ink3);
+}
+
+.neigh-clear {
+  margin-inline-start: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font-size: 10.5px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.neigh-clear:hover { text-decoration: underline }
+
+.neigh-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel2);
+}
+
+.neigh-opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.neigh-opt:hover { background: color-mix(in srgb, var(--c-place) 8%, transparent) }
+.neigh-opt.on { color: var(--ink); font-weight: 600 }
+.neigh-opt input { accent-color: var(--c-place); cursor: pointer; flex: 0 0 auto }
+
+.neigh-empty { padding: 8px; font-size: 11px; color: var(--ink3); text-align: center }
 
 .neigh-header {
   font-size: 11px;
