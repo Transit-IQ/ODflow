@@ -16,6 +16,10 @@ import { fmtNum, escHtml } from '../../core/format.js';
 const LAYERS = [
   { key: 'speed', label: 'רשת מהירויות אוטובוס',   tint: 'var(--ramp)',   swatch: null },
   { key: 'cong',  label: 'מוקדי גודש (&lt;15 קמ״ש)', tint: 'var(--c-cong)', swatch: 'background:var(--sp1)' },
+  // The roads row is held back with the rest of the roads wiring in main.js —
+  // layers/roads.js was never committed, so the switch would toggle nothing.
+  // Restore it here when that file lands:
+  //   { key: 'roads', label: 'רשת דרכים + כיוונים', tint: '#f9b29c', swatch: 'background:#f9b29c' },
   { key: 'dest',  label: 'מוקדי עניין',     tint: 'var(--c-place)', swatch: 'multi' },
   { key: 'stops', label: 'תחנות ועליות',            tint: 'var(--c-ride)', swatch: 'background:var(--primary)' },
 ];
@@ -32,11 +36,27 @@ export function LayerToggles() {
           <span class="tl">${l.label}</span>
         </div>
         ${l.key === 'dest' ? '<div class="dest-cats" hidden></div>' : ''}
-        ${l.key === 'stops' ? '<div id="stopsLegend" class="legend" hidden></div>' : ''}`).join('')}
+        ${l.key === 'stops' ? `
+          <div id="stopsFilter" hidden>
+            <div class="filter-row">
+              <span class="filter-label">סינון: נסיעות מעבר עד</span>
+              <input type="range" id="transferPctSlider" min="0" max="100" step="5" value="100">
+              <span id="transferPctVal">100%</span>
+            </div>
+          </div>
+          <div id="stopsLegend" class="legend" hidden></div>` : ''}`).join('')}
     </div>`;
 
   const catsEl = $(el, '.dest-cats');
   const legendEl = $(el, '#stopsLegend');
+  const filterEl = $(el, '#stopsFilter');
+  const slider = $(el, '#transferPctSlider');
+  const valEl = $(el, '#transferPctVal');
+
+  slider.addEventListener('input', () => {
+    valEl.textContent = `${slider.value}%`;
+    setState({ transferPctMax: +slider.value });
+  });
 
   el.querySelectorAll('.toggle').forEach(t => {
     t.addEventListener('click', () => {
@@ -105,10 +125,11 @@ export function LayerToggles() {
       <div class="stops-legend-note">גודל העיגול ביחס למספר העליות</div>`;
   }
 
-  /** Show or hide the two panels that only make sense when their layer is on. */
+  /** Show or hide the panels that only make sense when their layer is on. */
   function syncPanels() {
     catsEl.hidden = !state.layers.dest;
     legendEl.hidden = !state.layers.stops;
+    filterEl.hidden = !state.layers.stops;
   }
 
   syncPanels();

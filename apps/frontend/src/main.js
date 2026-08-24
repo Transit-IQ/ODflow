@@ -27,6 +27,16 @@ import * as routes from './layers/routes.js';
 import * as imported from './layers/imported.js';
 import { cityBorderLayer, drawCityBorder, highlightAreas, clearHighlight } from './layers/boundary.js';
 
+// The roads layer from origin/main is held back: apps/frontend/src/layers/roads.js
+// was never committed, so `import * as roads` here would stop the app booting.
+// Everything else it needs is already merged — loadRoads() in core/data.js,
+// state.layers.roads, the road colours in core/palette.js, roadPane/arrowPane in
+// core/map.js and build_roads.py. To finish wiring it once that file lands:
+// import it, add roadsLayer + arrowLayer to the map, call roads.onZoom() on
+// zoomend, roads.setVisible(state.layers.roads) in applyLayerVisibility with the
+// loadRoads() fetch, roads.build(data.roads) in the theme hook, and restore the
+// roads row in components/LayerToggles.
+
 import { Header } from './components/Header/index.js';
 import { KpiBar } from './components/KpiBar/index.js';
 import { TimeFilter } from './components/TimeFilter/index.js';
@@ -163,6 +173,12 @@ subscribe((s, changed) => {
   if (changed.has('layers')) applyLayerVisibility();
 
   if (changed.has('destCats') && data.destinations) destinations.render();
+
+  if (changed.has('transferPctMax') && data.stops && (s.layers.stops || routes.activeRoutes().length)) {
+    stops.render();
+    layerToggles.renderStopsLegend();
+    stopPanel.refresh();
+  }
 
   if (changed.has('area')) {
     speed.computeMembership();

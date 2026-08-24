@@ -101,7 +101,9 @@ export function render() {
   stopsLayer.clearLayers();
   markers.clear();
 
-  // Same area rule the speed and destination layers use.
+  // Same area rule the speed and destination layers use. Kept unfiltered by the
+  // transfer-pct slider on purpose: this is what every roll-up is summed from,
+  // and a display filter must not silently change a reported total.
   stopsState.inArea = data.stops.stations.filter(
     s => !state.area || pointInArea(s.lat, s.lon, state.area)
   );
@@ -112,9 +114,17 @@ export function render() {
   // holds, so a stop shared by the area and the line is one dot with one panel;
   // stops the survey never covered come back with a null boardings_day and draw
   // as the hollow ring this layer already uses for "not surveyed".
-  const base = state.layers.stops ? stopsState.inArea : [];
-  const seen = new Set(base);
-  stopsState.visible = base.concat(
+  // The transfer-pct slider is a display filter over the AREA's stops only. A
+  // line's own stops are exempt: you asked for that line by name, so thinning its
+  // sequence would show a route with holes in it and read as missing data rather
+  // than as a filter.
+  const shown = state.layers.stops
+    ? (state.transferPctMax < 100
+        ? stopsState.inArea.filter(s => s.transfer_pct == null || s.transfer_pct <= state.transferPctMax)
+        : stopsState.inArea)
+    : [];
+  const seen = new Set(shown);
+  stopsState.visible = shown.concat(
     stationsForRoutes(routes.activeRoutes()).filter(s => !seen.has(s))
   );
 
