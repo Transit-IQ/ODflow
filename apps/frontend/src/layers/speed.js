@@ -11,6 +11,7 @@ import { state } from '../core/store.js';
 import { polylineInArea } from '../core/geo.js';
 import { speedColor, speedWeight, mapColors, CONGESTION_KMH } from '../core/palette.js';
 import { data } from '../core/data.js';
+import { speedIndices, allSpeedIndices } from '../core/periods.js';
 
 export const speedLayer = L.layerGroup();
 export const congestionLayer = L.layerGroup();
@@ -18,17 +19,24 @@ export const congestionLayer = L.layerGroup();
 const polylines = [];
 let areaMembership = null;   // Set of polylines inside the selected area, or null
 
+const WINDOWS_PER_DAY = 7;
+
 /**
- * Average a segment's 35 readings (5 days × 7 periods) across whichever
- * day(s)/period(s) are currently selected.
+ * Average a segment's 35 readings (5 days × 7 speed windows) across whichever
+ * day(s) and window(s) the current cut selects.
+ *
+ * A period is a survey band, and a band can hold more than one speed window —
+ * 04-06 holds two — so the windows come from the period rather than being the
+ * period. A band with no window at all (the near-empty 00-04 night, which the
+ * speed file does not cover) yields null, and the caller reports it as missing.
  */
 function segmentSpeed(speeds) {
   const days = state.day === 'avg' ? [0, 1, 2, 3, 4] : [state.day];
-  const periods = state.period === 'all' ? [0, 1, 2, 3, 4, 5, 6] : [state.period];
+  const windows = state.period === 'all' ? allSpeedIndices() : speedIndices(state.period);
   let sum = 0, n = 0;
   for (const d of days) {
-    for (const h of periods) {
-      const v = speeds[d * 7 + h];
+    for (const h of windows) {
+      const v = speeds[d * WINDOWS_PER_DAY + h];
       if (v && v > 0) { sum += v; n++; }
     }
   }

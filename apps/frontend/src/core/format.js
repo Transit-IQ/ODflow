@@ -1,7 +1,7 @@
 /** Hebrew labels and number formatting shared across components. */
 
-export const PNAMES = ['בוקר מוקדם', 'שעות הבוקר', 'לפני הצהריים', 'צהריים', 'אחר הצהריים', 'שעת שיא ערב', 'ערב / לילה'];
-export const PTIMES = ['≈05–07', '≈07–09', '≈09–12', '≈12–15', '≈15–17', '≈17–19', '≈19–24'];
+import { periodName, hoursLabel, periodCount } from './periods.js';
+
 export const DAYNAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי'];
 export const DAYAB = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳'];
 
@@ -16,9 +16,16 @@ export function dayLabel(day) {
   return day === 'avg' ? 'ממוצע ימי חול (א׳–ה׳)' : 'יום ' + DAYNAMES[day];
 }
 
-/** Caption for the currently selected time-of-day window. */
+/**
+ * Caption for the currently selected time-of-day window.
+ *
+ * The hours are the survey's published band bounds, so they are stated plainly.
+ * The dashboard used to print them with a ≈ because the windows were guessed
+ * here rather than read from the data; there is nothing left to hedge.
+ */
 export function periodLabel(period) {
-  return period === 'all' ? 'כל שעות היום' : PNAMES[period] + ' ' + PTIMES[period];
+  if (period === 'all' || !periodCount()) return 'כל שעות היום';
+  return `${periodName(period)} ${hoursLabel(period)}`;
 }
 
 export function escHtml(v) {

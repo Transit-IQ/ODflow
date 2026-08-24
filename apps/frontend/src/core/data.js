@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_CENTER } from './map.js';
+import { setPeriods } from './periods.js';
 
 const url = name => `${import.meta.env.BASE_URL}data/${name}`;
 
@@ -15,7 +16,8 @@ export const data = {
   center: DEFAULT_CENTER,
   border: null,          // city-limits GeoJSON
   segments: [],          // speed network: [{ coordinates, speeds[35] }]
-  speedProfile: null,    // average speed per period, P1..P7
+  speedProfile: null,    // average speed per SPEED WINDOW — indexed by a period's
+                         // speed_indices, not by the period's own position
   stopTotals: null,      // city-wide ridership roll-up from kpis.json
   destinations: null,    // { categories, points } — lazy
   stops: null,           // { stations, bands, rider_types, source } — lazy
@@ -57,6 +59,9 @@ export async function loadCore() {
 
   if (kpis.status === 'fulfilled') {
     data.speedProfile = kpis.value.speed_profile || null;
+    // The time axis, derived by the pipeline from the survey's own band columns.
+    // Everything that shows an hour range reads it from here — see core/periods.js.
+    setPeriods(kpis.value.periods);
     // City-wide ridership totals ride along in kpis.json so the boardings tile
     // has a real figure before anyone opens the (lazily fetched) stop layer.
     data.stopTotals = kpis.value.stops || null;

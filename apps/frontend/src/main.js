@@ -18,15 +18,24 @@ import { html, $ } from './core/dom.js';
 import { state, subscribe } from './core/store.js';
 import { onTheme } from './core/theme.js';
 import { createMap, map, refreshBasemap, DEFAULT_CENTER } from './core/map.js';
-import { data, loadCore, loadDestinations, loadStops, loadRoads } from './core/data.js';
+import { data, loadCore, loadDestinations, loadStops } from './core/data.js';
 
 import * as speed from './layers/speed.js';
 import * as destinations from './layers/destinations.js';
 import * as stops from './layers/stops.js';
 import * as routes from './layers/routes.js';
 import * as imported from './layers/imported.js';
-import * as roads from './layers/roads.js';
-import { cityBorderLayer, drawCityBorder, highlightArea, clearHighlight } from './layers/boundary.js';
+import { cityBorderLayer, drawCityBorder, highlightAreas, clearHighlight } from './layers/boundary.js';
+
+// The roads layer from origin/main is held back: apps/frontend/src/layers/roads.js
+// was never committed, so `import * as roads` here would stop the app booting.
+// Everything else it needs is already merged — loadRoads() in core/data.js,
+// state.layers.roads, the road colours in core/palette.js, roadPane/arrowPane in
+// core/map.js and build_roads.py. To finish wiring it once that file lands:
+// import it, add roadsLayer + arrowLayer to the map, call roads.onZoom() on
+// zoomend, roads.setVisible(state.layers.roads) in applyLayerVisibility with the
+// loadRoads() fetch, roads.build(data.roads) in the theme hook, and restore the
+// roads row in components/LayerToggles.
 
 import { Header } from './components/Header/index.js';
 import { KpiBar } from './components/KpiBar/index.js';
@@ -57,7 +66,9 @@ createMap(mapEl);
 const header = Header();
 const kpis = KpiBar();
 const timeBadge = TimeBadge();
-const stopPanel = StopPanel();
+// A line lit from a stop's chip row goes into the same route layer the sidebar
+// drives, so the sidebar's list has to re-read which routes are active.
+const stopPanel = StopPanel({ onRoutesChanged: () => areaPanel.renderRoutes() });
 
 const areaPanel = AreaPanel({ onAreaChange: handleAreaChange });
 const timeFilter = TimeFilter({ onReset: handleReset });
@@ -75,12 +86,24 @@ aside.append(areaPanel.el, timeFilter.el, layerToggles.el, speedLegend.el, impor
 
 // ── Layer wiring ─────────────────────────────────────────────────────────────
 cityBorderLayer.addTo(map);
-roads.roadsLayer.addTo(map);
-roads.arrowLayer.addTo(map);
 speed.speedLayer.addTo(map);
 routes.attachTo(map);
 
-map.on('zoomend', () => roads.onZoom());
+// A drawn line shows its own stops, wherever they are. They are the same station
+// records the stop layer draws, so this only has to re-render that layer — and
+// pull in the survey file first if nothing has needed it yet.
+routes.onChange(() => {
+  if (!data.stops) {
+    loadStops()
+      .then(() => { stops.render(); stops.syncVisibility(); layerToggles.renderStopsLegend(); })
+      .catch(e => console.error('[Stops] failed to load for the drawn line:', e));
+    return;
+  }
+  stops.render();
+  stops.syncVisibility();
+  layerToggles.renderStopsLegend();
+  stopPanel.refresh();
+});
 
 stops.setSelectHandler(() => stopPanel.render());
 
@@ -95,18 +118,8 @@ function refreshSpeed() {
 function applyLayerVisibility() {
   speed.setVisible(state.layers);
   destinations.setVisible(state.layers.dest);
-  stops.setVisible(state.layers.stops);
-  roads.setVisible(state.layers.roads);
+  stops.syncVisibility();
   layerToggles.syncPanels();
-
-  if (state.layers.roads && !data.roads) {
-    loadRoads()
-      .then(geojson => {
-        roads.build(geojson);
-        roads.setVisible(state.layers.roads); // re-sync arrows after async build
-      })
-      .catch(e => console.error('[Roads] failed to load:', e));
-  }
 
   if (state.layers.dest) {
     loadDestinations()
@@ -114,13 +127,31 @@ function applyLayerVisibility() {
       .catch(e => console.error('[Destinations] failed to load:', e));
   }
 
-  if (state.layers.stops) {
+  // Two things put stops on the map: the toggle, and a drawn line bringing its
+  // own. So the redraw is driven by whether anything will be drawn at all —
+  // keying it to the toggle alone would leave a line's stops stale when the
+  // toggle went off, and would close the panel on a stop still sitting on screen.
+  if (state.layers.stops || routes.activeRoutes().length) {
     loadStops()
-      .then(() => { stops.render(); layerToggles.renderStopsLegend(); })
+      .then(() => { stops.render(); layerToggles.renderStopsLegend(); refreshRidership(); })
       .catch(e => console.error('[Stops] failed to load:', e));
   } else {
     stopPanel.close();
   }
+}
+
+/**
+ * Boardings for the current selection. The station list the map is drawing is
+ * passed through whenever it's loaded, because neighbourhood catchments overlap
+ * and only a per-station sum counts a shared border station once — see
+ * KpiBar.setRidership.
+ */
+function refreshRidership() {
+  // inArea, never visible: a drawn line's stops ignore the area filter on purpose,
+  // and rolling them into a neighbourhood's boardings would credit it with stops
+  // in another city.
+  const stations = data.stops && state.areaRecords.length ? stops.stopsState.inArea : null;
+  kpis.setRidership(state.areaRecords, data.stopTotals, stations);
 }
 
 subscribe((s, changed) => {
@@ -129,11 +160,21 @@ subscribe((s, changed) => {
     refreshSpeed();
   }
 
+  // The stop layer is classified on the selected window's boardings, so a period
+  // step — including every tick of הרצת יום — has to redraw it. `day` is left out
+  // on purpose: the station survey is a weekday average and has nothing to say
+  // about א׳ vs ה׳, so redrawing on a day pill would only fake a change.
+  if (changed.has('period') && data.stops) {
+    stops.render();
+    layerToggles.renderStopsLegend();
+    stopPanel.refresh();
+  }
+
   if (changed.has('layers')) applyLayerVisibility();
 
   if (changed.has('destCats') && data.destinations) destinations.render();
 
-  if (changed.has('transferPctMax') && data.stops && s.layers.stops) {
+  if (changed.has('transferPctMax') && data.stops && (s.layers.stops || routes.activeRoutes().length)) {
     stops.render();
     layerToggles.renderStopsLegend();
     stopPanel.refresh();
@@ -149,17 +190,26 @@ subscribe((s, changed) => {
       layerToggles.renderStopsLegend();
       stopPanel.refresh();
     }
-    kpis.setRidership(s.areaRecord, data.stopTotals);
+    refreshRidership();
+
+    // More than one neighbourhood picked and the station file not fetched yet:
+    // its per-station figures are the only way to add up overlapping catchments
+    // without double-counting, so pull it in even with the stop layer off.
+    if (!data.stops && s.areaRecords.length > 1) {
+      loadStops()
+        .then(() => { stops.render(); refreshRidership(); })
+        .catch(e => console.error('[Stops] failed to load for the area roll-up:', e));
+    }
   }
 });
 
-/** An area was picked (or cleared) in the sidebar: move and outline the map. */
-function handleAreaChange(neigh) {
-  if (!neigh) {
+/** The selection changed in the sidebar: move and outline the map. */
+function handleAreaChange(neighs) {
+  if (!neighs?.length) {
     clearHighlight();
     return;
   }
-  const bounds = highlightArea(neigh);
+  const bounds = highlightAreas(neighs);
   if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
 }
 
@@ -177,11 +227,10 @@ onTheme(() => {
   refreshSpeed();
   timeFilter.buildSpark();
   drawCityBorder(data.border);
-  if (state.areaRecord) highlightArea(state.areaRecord);
+  if (state.areaRecords.length) highlightAreas(state.areaRecords);
   routes.refresh();
   areaPanel.renderRoutes();
   imported.refresh();
-  if (data.roads) roads.build(data.roads);
   if (data.destinations) { layerToggles.renderCategories(); destinations.render(); }
   if (data.stops) {
     stops.render();
@@ -201,9 +250,12 @@ async function start() {
   if (data.center) map.setView(data.center, 13);
 
   speed.build();
+  // The period pills and the sparkline are both the time axis kpis.json ships,
+  // so neither can be drawn before loadCore has resolved.
+  timeFilter.buildPeriods();
   timeFilter.buildSpark();
   refreshSpeed();
-  kpis.setRidership(null, data.stopTotals);
+  refreshRidership();
   applyLayerVisibility();
 
   if (segmentsFailed) kpis.setSegmentError('שגיאת נתונים');

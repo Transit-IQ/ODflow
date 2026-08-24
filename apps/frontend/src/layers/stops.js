@@ -4,14 +4,24 @@
  * Every figure comes from data/stops.json, generated out of the תלת״ן station
  * survey joined to GTFS for the line numbers. Nothing here invents a number: a
  * station the survey never covered renders as "no survey data", never as zero.
+ *
+ * The layer follows the time cut as well as the area filter: pick a period (or
+ * press הרצת יום and let it step through all seven) and every dot is resized,
+ * recoloured and re-classified on that window's boardings, so the morning peak
+ * and the late evening are visibly different networks rather than one static
+ * daily picture. The survey is a weekday average, so the day pills א׳–ה׳ move
+ * the speed network but correctly leave the stops alone.
  */
 
 import { setLayerVisible } from '../core/map.js';
 import { state } from '../core/store.js';
 import { pointInArea } from '../core/geo.js';
 import { data } from '../core/data.js';
+import { boardingsFor } from '../core/boardings.js';
+import { stationsForRoutes } from '../core/routeStations.js';
+import * as routes from './routes.js';
 import { stopRamp, mapColors } from '../core/palette.js';
-import { fmtNum, escHtml } from '../core/format.js';
+import { fmtNum, escHtml, periodLabel } from '../core/format.js';
 
 export const stopsLayer = L.layerGroup();
 
@@ -19,10 +29,33 @@ const markers = new Map();   // stop key → Leaflet marker
 let onSelect = () => {};
 
 export const stopsState = {
-  visible: [],   // stations passing the current area filter
+  // Two sets, because "what is drawn" and "what the area's totals are summed
+  // from" stopped being the same thing once a drawn line brought its own stops in.
+  visible: [],   // every station on the map right now — area stops plus line stops
+  inArea: [],    // survey stations passing the area filter, and ONLY those. Every
+                 // roll-up reads this: a line's stops reach far outside the
+                 // selected neighbourhood, and summing them into a neighbourhood
+                 // figure would inflate it with boardings from another city.
   breaks: [],    // colour-class upper bounds, recomputed from the visible stations
   selected: null,
 };
+
+/**
+ * What the layer is drawing for a station right now: its boardings in the
+ * selected period, or its daily total when no period is selected.
+ *
+ * Exported because the legend and the roll-up panel describe this same layer,
+ * and reading a second figure out of the station record would let them drift
+ * from the dots on the map.
+ */
+export function valueFor(station) {
+  return boardingsFor(station, state.period);
+}
+
+/** Caption for whatever `valueFor` is currently returning. */
+export function valueLabel() {
+  return state.period === 'all' ? 'עליות ליום' : `עליות · ${periodLabel(state.period)}`;
+}
 
 export function stopKey(s) {
   return `${s.code}@${s.lat},${s.lon}`;
@@ -40,7 +73,7 @@ export function setSelectHandler(fn) {
  * in the lowest colour and waste the ramp.
  */
 function computeBreaks(stations) {
-  const vals = stations.map(s => s.boardings_day).filter(v => v != null).sort((a, b) => a - b);
+  const vals = stations.map(valueFor).filter(v => v != null).sort((a, b) => a - b);
   if (!vals.length) return [];
   const ramp = stopRamp();
   return Array.from({ length: ramp.length - 1 },
@@ -68,28 +101,50 @@ export function render() {
   stopsLayer.clearLayers();
   markers.clear();
 
-  // Area filter drives statistics (legend counts, stop panel roll-up).
-  stopsState.visible = data.stops.stations.filter(
+  // Same area rule the speed and destination layers use. Kept unfiltered by the
+  // transfer-pct slider on purpose: this is what every roll-up is summed from,
+  // and a display filter must not silently change a reported total.
+  stopsState.inArea = data.stops.stations.filter(
     s => !state.area || pointInArea(s.lat, s.lon, state.area)
   );
+
+  // A drawn line brings its whole stop sequence, area filter or not — the point
+  // of drawing a line is to see where it goes, and it does not stop at the
+  // neighbourhood boundary. These are the same station records the survey set
+  // holds, so a stop shared by the area and the line is one dot with one panel;
+  // stops the survey never covered come back with a null boardings_day and draw
+  // as the hollow ring this layer already uses for "not surveyed".
+  // The transfer-pct slider is a display filter over the AREA's stops only. A
+  // line's own stops are exempt: you asked for that line by name, so thinning its
+  // sequence would show a route with holes in it and read as missing data rather
+  // than as a filter.
+  const shown = state.layers.stops
+    ? (state.transferPctMax < 100
+        ? stopsState.inArea.filter(s => s.transfer_pct == null || s.transfer_pct <= state.transferPctMax)
+        : stopsState.inArea)
+    : [];
+  const seen = new Set(shown);
+  stopsState.visible = shown.concat(
+    stationsForRoutes(routes.activeRoutes()).filter(s => !seen.has(s))
+  );
+
   stopsState.breaks = computeBreaks(stopsState.visible);
 
-  // Transfer-pct filter only controls which markers appear on the map.
-  const displayed = state.transferPctMax < 100
-    ? stopsState.visible.filter(s => s.transfer_pct == null || s.transfer_pct <= state.transferPctMax)
-    : stopsState.visible;
-
-  const max = stopsState.visible.reduce((m, s) => Math.max(m, s.boardings_day || 0), 0);
+  // Classes and radii are rescaled to the period on screen, not to the daily
+  // maximum. A quiet late evening should read as a quiet evening's own spread of
+  // busy and empty stops, not as a city where every dot has gone dark.
+  const max = stopsState.visible.reduce((m, s) => Math.max(m, valueFor(s) || 0), 0);
   const colors = mapColors();
   // Un-surveyed stops stay hollow; surveyed ones get a hairline in the
   // basemap's own colour so overlapping dots stay countable.
   const hollowRing = colors.empty;
 
-  for (const s of displayed) {
-    const fill = colorFor(s.boardings_day);
+  for (const s of stopsState.visible) {
+    const value = valueFor(s);
+    const fill = colorFor(value);
     const marker = L.circleMarker([s.lat, s.lon], {
       pane: 'pointPane',
-      radius: radiusFor(s.boardings_day, max),
+      radius: 1.2*radiusFor(value, max),
       color: fill ? colors.hairline : hollowRing,
       weight: fill ? 1 : 1.5,
       fillColor: fill || 'transparent',
@@ -99,9 +154,16 @@ export function render() {
     marker._stroke = fill ? colors.hairline : hollowRing;
     marker._weight = fill ? 1 : 1.5;
 
+    // Under a period cut the tooltip names the window and keeps the daily total
+    // beside it, so a dot that just shrank can be read against what it was.
     marker.bindTooltip(
       `<div dir="rtl" style="text-align:right"><b>${escHtml(s.name)}</b><br>` +
-      (s.boardings_day != null ? `${fmtNum(s.boardings_day)} עליות ביום` : 'ללא נתוני סקר') +
+      (value == null
+        ? 'ללא נתוני סקר'
+        : state.period !== 'all'
+          ? `${fmtNum(value)} עליות · ${escHtml(periodLabel(state.period))}<br>` +
+            `<span style="opacity:.7">${fmtNum(s.boardings_day)} עליות ביום</span>`
+          : `${fmtNum(value)} עליות ביום`) +
       '</div>',
       { direction: 'top', opacity: 0.95 }
     );
@@ -138,6 +200,13 @@ export function clearSelection() {
   highlightSelected();
 }
 
-export function setVisible(visible) {
-  setLayerVisible(stopsLayer, visible);
+/**
+ * The layer is on the map when the toggle asks for it OR a line is drawn.
+ *
+ * A line's stops must not depend on an unrelated switch: drawing a route and
+ * getting no stops because "תחנות ועליות" happened to be off would read as a line
+ * with no stops rather than as a hidden layer.
+ */
+export function syncVisibility() {
+  setLayerVisible(stopsLayer, state.layers.stops || routes.activeRoutes().length > 0);
 }

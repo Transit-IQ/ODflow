@@ -106,6 +106,34 @@ on explicit `ms_shchuna` codes rather than fuzzy names, and still accepts severa
 which is what a caller would need to merge the neighbourhoods this layer splits north/south
 (e.g. 30+31, 33+35).
 
+#### The analysis catchment
+
+Service is not measured against that boundary directly. `build_analysis_boundaries()` grows each
+polygon outwards by `municipal_loader.ANALYSIS_BUFFER_M` — currently **150 m**, a two-minute walk —
+projected through EPSG:2039 since a metre is not a degree, and *that* is what stops, routes and
+stations are tested against. A municipal boundary is an administrative line, not a travel one: the
+stop on the far kerb of the street that forms the border serves the neighbourhood exactly as much as
+the one on the near kerb, and the station just outside the line is often the one residents actually
+use.
+
+The constant is the only place the distance is written down — it ships to the frontend on every
+neighbourhood record as `analysis_buffer_m`, and the dashboard labels read from there. Changing it
+requires re-running the pipeline; the generated JSON carries whatever catchments it was built with.
+
+Both polygons ship to the frontend — `boundary` (official) and `analysis_boundary` (catchment) —
+because they answer different questions and mixing them up would be a real error:
+
+| Figure | Measured against | Why |
+|---|---|---|
+| `population` | official boundary | Residents belong to the neighbourhood they live in. Apportioning from a buffered polygon would credit each area with its neighbours' people, and the 71 figures would no longer sum to the city. |
+| `route_ids`, `transit`, every map layer's area filter | catchment | These are questions about *service*, which crosses the line. |
+
+Catchments overlap by design — 697 of the 1,069 survey stations fall inside more than one — so each
+station carries both `neighbourhood` (the one polygon it physically stands in) and `neighbourhoods`
+(every catchment it serves). Per-neighbourhood `transit` blocks are therefore **not a partition** of
+the city's boardings and must not be added together; anything summing over several neighbourhoods
+has to sum the stations instead, which is what the dashboard's boardings tile does.
+
 ### `אזורים סטטיסטים/`
 
 184 CBS (למ״ס) statistical areas, 2022, carrying `sum_pop_all` plus nine age bands
@@ -116,7 +144,8 @@ Total across the layer is 463,569 residents, which matches Tel Aviv-Yafo's publi
 
 Population per neighbourhood is derived by **areal interpolation** in
 `services/municipal_loader.population_for()`: each statistical area contributes population in
-proportion to how much of it falls inside the neighbourhood polygon. This assumes uniform density
+proportion to how much of it falls inside the neighbourhood's **official** polygon — not the 250 m
+catchment above, which overlaps its neighbours. This assumes uniform density
 within a single statistical area — the standard assumption, and a reasonable one here since CBS
 areas are drawn to be internally homogeneous and are small relative to a neighbourhood. 63 of the 71
 neighbourhoods come out with a population; the other 8 (the port, the fairgrounds, two parks, the
@@ -196,6 +225,15 @@ near-empty platform pull the figure as hard as a busy one. 1,086 records → 1,0
 `ONDAY` (246.1 vs 216.4 at code 21482). Dividing by `ONDAY` instead would quietly shave that gap off
 every station's mix.
 
+**The band columns and `ONDAY` disagree per station.** `ON0406`…`ON2404` sum to a median of
+**0.70 × `ONDAY`** at station level (0.0–1.62 across the city; only 15 of 957 stations agree within
+1%), even though the two totals land within 2.5% of each other city-wide (411,941 vs 422,398). The
+dashboard's time-of-day view therefore reads the **bands for the shape** of a station's day and
+**`ONDAY` for its level**: a period gets its share of the banded day, applied to the daily total.
+Using the raw band values would put every period figure on a scale that contradicts the daily one
+shown everywhere else; rescaling is the same reconciliation the rider shares already make. See
+`apps/frontend/src/core/boardings.js`.
+
 City totals as generated: **422,398 boardings/day** across 957 surveyed stops.
 
 ### `NatazEX_shape_202605/` and `fcl_area_shape_202605/`
@@ -216,7 +254,7 @@ all from an empty, hardcoded `STATIONS = []` array. Now backed by `taltan/statio
 rendered by `apps/frontend/src/layers/stops.js` plus the `StopPanel` component.
 
 The survey turned out to carry exactly the buckets this section asked for
-(`04-06 … 24-04`), the rider types, and the transfer share — and the join is on `stop_code` as
+(`04-06 … 00-04`), the rider types, and the transfer share — and the join is on `stop_code` as
 predicted: `stop_id` here is a feed-internal key regenerated on every GTFS revision, and only 1 of
 35,178 rows has `stop_id == stop_code`. 961 of the city's 1,069 stops match a GTFS line list.
 

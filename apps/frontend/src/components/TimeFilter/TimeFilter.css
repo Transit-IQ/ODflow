@@ -114,3 +114,18 @@
 .spark-cap { font-size: 10px; color: var(--ink3); margin-top: 6px }
 
 .playrow { display: flex; gap: 6px; margin-top: 10px }
+
+/* A period the survey covers but the speed file does not — the 00-04 night.
+   Dimmed rather than hidden or disabled: it still filters the stop layer to real
+   boardings, so it has to stay clickable, and a missing row would read as a
+   period that does not exist. The dashed bar-well says "measured nothing here",
+   which an empty solid bar would not distinguish from "measured zero". */
+.prow.no-speed .pt { color: var(--ink3); opacity: .65 }
+.prow.no-speed .pn { opacity: .65 }
+
+.spk.no-speed .bar-wrap {
+  border: 1px dashed var(--line);
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+.spk.no-speed .val { opacity: .5 }
