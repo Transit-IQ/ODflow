@@ -21,17 +21,23 @@
 /** Live list of `{ label, from, to, band_index, speed_indices }`, filled at boot. */
 export const periods = [];
 
-// Display names for the survey's published bands. Keyed by the band label rather
-// than by position, so a survey edition that re-cuts its bands falls back to
-// showing the hours instead of silently mislabelling a window.
+// Display names for the survey's published bands, keyed by the band's HOURS
+// rather than by its label text or its position.
+//
+// The label is the survey's own string and it is not stable — the night band has
+// been written both `24-04` and `00-04`. A name keyed on that text stops matching
+// the moment it changes, and the row then silently prints its hours where its
+// name belongs, with no error to notice. The bounds do not have that problem:
+// they are numbers, the night is unambiguously 24->28, and a band that genuinely
+// moves gets no name rather than a wrong one.
 const NAMES = {
-  '04-06': 'לפנות בוקר',
-  '06-09': 'שעת שיא בוקר',
-  '09-12': 'לפני הצהריים',
+  '4-6': 'לפנות בוקר',
+  '6-9': 'שעת שיא בוקר',
+  '9-12': 'לפני הצהריים',
   '12-15': 'צהריים',
   '15-19': 'שעת שיא אחר הצהריים',
   '19-24': 'ערב',
-  '00-04': 'לילה',
+  '24-28': 'לילה',
 };
 
 export function setPeriods(list) {
@@ -51,15 +57,20 @@ export function periodAt(i) {
 export function periodName(i) {
   const p = periods[i];
   if (!p) return '';
-  return NAMES[p.label] || hoursLabel(i);
+  return NAMES[`${p.from}-${p.to}`] || hoursLabel(i);
 }
 
-/** `04–06`. The bounds are the survey's, so there is no ≈ to apologise with. */
+/**
+ * `04–06`. The survey's own published band string, only re-punctuated.
+ *
+ * Printed rather than recomputed from the bounds: the bounds carry the night as
+ * 24->28 so it sorts and overlaps correctly, and rendering those through a modulo
+ * turned the evening into `19–00`, a range the survey never wrote.
+ */
 export function hoursLabel(i) {
   const p = periods[i];
   if (!p) return '';
-  const hh = h => String(h % 24).padStart(2, '0');
-  return `${hh(p.from)}–${hh(p.to)}`;
+  return String(p.label ?? '').replace('-', '–');
 }
 
 /** The speed-file column offsets inside this period. Empty when it has no speed data. */
