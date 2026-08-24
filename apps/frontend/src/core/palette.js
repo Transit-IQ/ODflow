@@ -116,6 +116,43 @@ export function destFamilyColor(familyId) {
   return (isLight() ? DEST_COLORS.light : DEST_COLORS.dark)[familyId];
 }
 
+// ── Road network ─────────────────────────────────────────────────────────────
+// Colors match the OSM-carto road hierarchy so planners read them intuitively.
+// Weights are halved from "paper map" defaults — we're overlaying transit data.
+const ROAD_COLORS_DARK = {
+  motorway: '#fc8a8a', motorway_link: '#fc8a8a',
+  trunk: '#fbb88a',    trunk_link: '#fbb88a',
+  primary: '#fce08a',  primary_link: '#fce08a',
+  secondary: '#d8d8b0', secondary_link: '#d8d8b0',
+  tertiary: '#909090', tertiary_link: '#909090',
+  residential: '#606878', unclassified: '#606878', living_street: '#606878',
+};
+const ROAD_COLORS_LIGHT = {
+  motorway: '#e892a2', motorway_link: '#e892a2',
+  trunk: '#f9b29c',    trunk_link: '#f9b29c',
+  primary: '#fcd6a4',  primary_link: '#fcd6a4',
+  secondary: '#d8d8a0', secondary_link: '#d8d8a0',
+  tertiary: '#b8b8b8', tertiary_link: '#b8b8b8',
+  residential: '#c8c8c8', unclassified: '#c8c8c8', living_street: '#c8c8c8',
+};
+const ROAD_WEIGHT = {
+  motorway: 4, motorway_link: 2.5,
+  trunk: 4,    trunk_link: 2.5,
+  primary: 3,  primary_link: 2,
+  secondary: 2.5, secondary_link: 1.5,
+  tertiary: 1.5,  tertiary_link: 1,
+  residential: 1, unclassified: 1, living_street: 1,
+};
+
+export function roadColor(fclass) {
+  const map = isLight() ? ROAD_COLORS_LIGHT : ROAD_COLORS_DARK;
+  return map[fclass] ?? (isLight() ? '#b0b0b0' : '#505060');
+}
+
+export function roadWeight(fclass) {
+  return ROAD_WEIGHT[fclass] ?? 1;
+}
+
 // ── Stop ridership ───────────────────────────────────────────────────────────
 // Sequential single-hue ramp (the brand teal), ordered low-to-high so "more"
 // always reads as "stronger" on the surface in use: brightening against the dark
