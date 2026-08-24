@@ -14,9 +14,39 @@ import { agencyLabel } from '../core/agencies.js';
 
 export const routeLayer = L.layerGroup();
 
-const active = new Map();    // route_id → { stroke, casing, slot }
+const active = new Map();    // route_id → { route, stroke, casing }
 const slots = new Map();     // route_id → palette slot, stable for the session
 let nextSlot = 0;
+
+// Anything that has to redraw when the set of live routes changes — the stop
+// layer that follows them, for one. Layers do not call each other, so the
+// listener is registered by main.js rather than reached for from here.
+const listeners = new Set();
+
+/** Subscribe to activate/deactivate/clearAll. Returns an unsubscribe function. */
+export function onChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+// Coalesced to one call per task. "בחר הכל" activates every route in the area in
+// a synchronous loop, and a listener that redraws all their stops would otherwise
+// rebuild the whole set once per route — quadratic in the number of lines.
+let announcing = false;
+
+function announce() {
+  if (announcing) return;
+  announcing = true;
+  queueMicrotask(() => {
+    announcing = false;
+    for (const fn of listeners) fn();
+  });
+}
+
+/** The live route records, in activation order. */
+export function activeRoutes() {
+  return [...active.values()].map(entry => entry.route);
+}
 
 /** The colour a route has (or would get), stable across theme flips. */
 export function colorFor(routeId) {
@@ -60,7 +90,8 @@ export function activate(route) {
 
   casing.addTo(routeLayer);
   stroke.addTo(routeLayer);
-  active.set(route.route_id, { stroke, casing });
+  active.set(route.route_id, { route, stroke, casing });
+  announce();
 }
 
 export function deactivate(routeId) {
@@ -69,6 +100,7 @@ export function deactivate(routeId) {
   routeLayer.removeLayer(entry.stroke);
   routeLayer.removeLayer(entry.casing);
   active.delete(routeId);
+  announce();
 }
 
 export function toggle(route) {
@@ -77,7 +109,13 @@ export function toggle(route) {
 }
 
 export function clearAll() {
-  for (const routeId of [...active.keys()]) deactivate(routeId);
+  if (!active.size) return;
+  for (const entry of active.values()) {
+    routeLayer.removeLayer(entry.stroke);
+    routeLayer.removeLayer(entry.casing);
+  }
+  active.clear();
+  announce();
 }
 
 /** Re-step every live route after a theme flip. */

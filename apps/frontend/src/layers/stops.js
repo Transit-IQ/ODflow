@@ -17,7 +17,9 @@ import { setLayerVisible } from '../core/map.js';
 import { state } from '../core/store.js';
 import { pointInArea } from '../core/geo.js';
 import { data } from '../core/data.js';
-import { bandWeights, boardingsFor } from '../core/boardings.js';
+import { boardingsFor } from '../core/boardings.js';
+import { stationsForRoutes } from '../core/routeStations.js';
+import * as routes from './routes.js';
 import { stopRamp, mapColors } from '../core/palette.js';
 import { fmtNum, escHtml, periodLabel } from '../core/format.js';
 
@@ -27,10 +29,15 @@ const markers = new Map();   // stop key → Leaflet marker
 let onSelect = () => {};
 
 export const stopsState = {
-  visible: [],   // stations passing the current area filter
+  // Two sets, because "what is drawn" and "what the area's totals are summed
+  // from" stopped being the same thing once a drawn line brought its own stops in.
+  visible: [],   // every station on the map right now — area stops plus line stops
+  inArea: [],    // survey stations passing the area filter, and ONLY those. Every
+                 // roll-up reads this: a line's stops reach far outside the
+                 // selected neighbourhood, and summing them into a neighbourhood
+                 // figure would inflate it with boardings from another city.
   breaks: [],    // colour-class upper bounds, recomputed from the visible stations
   selected: null,
-  weights: null, // band→period weights for the current cut, null for the whole day
 };
 
 /**
@@ -42,7 +49,7 @@ export const stopsState = {
  * from the dots on the map.
  */
 export function valueFor(station) {
-  return boardingsFor(station, stopsState.weights);
+  return boardingsFor(station, state.period);
 }
 
 /** Caption for whatever `valueFor` is currently returning. */
@@ -95,13 +102,22 @@ export function render() {
   markers.clear();
 
   // Same area rule the speed and destination layers use.
-  stopsState.visible = data.stops.stations.filter(
+  stopsState.inArea = data.stops.stations.filter(
     s => !state.area || pointInArea(s.lat, s.lon, state.area)
   );
 
-  // The time cut, resolved once per render: which survey bands feed the selected
-  // period, and in what proportion. Everything below reads through valueFor.
-  stopsState.weights = bandWeights(data.stops.bands, state.period);
+  // A drawn line brings its whole stop sequence, area filter or not — the point
+  // of drawing a line is to see where it goes, and it does not stop at the
+  // neighbourhood boundary. These are the same station records the survey set
+  // holds, so a stop shared by the area and the line is one dot with one panel;
+  // stops the survey never covered come back with a null boardings_day and draw
+  // as the hollow ring this layer already uses for "not surveyed".
+  const base = state.layers.stops ? stopsState.inArea : [];
+  const seen = new Set(base);
+  stopsState.visible = base.concat(
+    stationsForRoutes(routes.activeRoutes()).filter(s => !seen.has(s))
+  );
+
   stopsState.breaks = computeBreaks(stopsState.visible);
 
   // Classes and radii are rescaled to the period on screen, not to the daily
@@ -118,7 +134,7 @@ export function render() {
     const fill = colorFor(value);
     const marker = L.circleMarker([s.lat, s.lon], {
       pane: 'pointPane',
-      radius: 2*radiusFor(value, max),
+      radius: 1.2*radiusFor(value, max),
       color: fill ? colors.hairline : hollowRing,
       weight: fill ? 1 : 1.5,
       fillColor: fill || 'transparent',
@@ -134,7 +150,7 @@ export function render() {
       `<div dir="rtl" style="text-align:right"><b>${escHtml(s.name)}</b><br>` +
       (value == null
         ? 'ללא נתוני סקר'
-        : stopsState.weights
+        : state.period !== 'all'
           ? `${fmtNum(value)} עליות · ${escHtml(periodLabel(state.period))}<br>` +
             `<span style="opacity:.7">${fmtNum(s.boardings_day)} עליות ביום</span>`
           : `${fmtNum(value)} עליות ביום`) +
@@ -174,6 +190,13 @@ export function clearSelection() {
   highlightSelected();
 }
 
-export function setVisible(visible) {
-  setLayerVisible(stopsLayer, visible);
+/**
+ * The layer is on the map when the toggle asks for it OR a line is drawn.
+ *
+ * A line's stops must not depend on an unrelated switch: drawing a route and
+ * getting no stops because "תחנות ועליות" happened to be off would read as a line
+ * with no stops rather than as a hidden layer.
+ */
+export function syncVisibility() {
+  setLayerVisible(stopsLayer, state.layers.stops || routes.activeRoutes().length > 0);
 }

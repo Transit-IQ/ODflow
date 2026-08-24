@@ -65,6 +65,145 @@ def write_json(name: str, obj) -> None:
     print(f"  wrote {path.relative_to(ROOT)} ({path.stat().st_size / 1024:.1f} KB)")
 
 
+# ── The shared time axis ─────────────────────────────────────────────────────
+# Only one of the two time-series sources publishes hour bounds.
+#
+# The תלת״ן survey writes its band into the column name — ``ON0406`` is boardings
+# between 04:00 and 06:00 — so taltan_loader parses the bounds straight out of the
+# data and never has them typed in. BUS_SPEED publishes none: its 35 columns are
+# ``d_<day>_h_<window>`` and neither the .dbf field list nor the .lyr aliases say
+# what hours a window covers.
+#
+# So the survey's bands ARE the axis, and the speed windows are laid onto them.
+# Six of the seven windows land on a band exactly; the remaining two both fall
+# inside the first band, which is why 04-06 averages a pair and every other band
+# reads a single window. Nothing is apportioned: a band's boardings are the
+# survey's own column, and a band's speed is the mean of the windows inside it.
+#
+# The layout is asserted here and re-checked against the data on every run by
+# _validate_alignment — the pipeline refuses to emit an axis it cannot justify.
+WINDOWS_PER_BAND = {0: 2}   # band index -> speed windows inside it; 1 unless listed
+
+
+def _band_bounds(label: str) -> tuple[int, int]:
+    """``'06-09'`` -> ``(6, 9)``; ``'00-04'`` -> ``(24, 28)``, the band past midnight."""
+    a, b = (int(x) for x in label.split("-"))
+    return (a, b + 24 if b <= a else b)
+
+
+def _speed_coverage(speeds: list, n_windows: int) -> list[float]:
+    """Share of city segment-days carrying a reading, per speed window."""
+    have = [0] * n_windows
+    total = [0] * n_windows
+    for seg in speeds:
+        vals = seg["speeds"]
+        for d in range(len(vals) // n_windows):
+            for h in range(n_windows):
+                total[h] += 1
+                v = vals[d * n_windows + h]
+                if v and v > 0:
+                    have[h] += 1
+    return [100 * have[h] / total[h] if total[h] else 0.0 for h in range(n_windows)]
+
+
+def _validate_alignment(periods: list[dict], coverage: list[float], bands, band_departures) -> None:
+    """
+    Re-derive the speed↔band alignment from the data and fail loudly if it moved.
+
+    Two independent checks, both against figures the sources publish themselves:
+
+    ``the night band``
+        The band running past midnight must be the emptiest the survey reports.
+        That is why no speed window is mapped to it: it carries ~1.7% of the city's
+        departures, and no speed window is that sparse — every one of the seven is
+        read on 70%+ of city segments, five of them on 95%+.
+
+    ``the 06:00 boundary``
+        Bus service steps up harder at 06:00 than anywhere else in the day (the
+        city goes from ~16k departures in the 05:00 hour to ~46k in the 06:00
+        hour), so segment coverage must step up hardest at whichever window
+        boundary is 06:00. That single fact is what pins the two sparse windows
+        inside the 04-06 band rather than anywhere else on the clock. If the jump
+        stops landing there, the columns have been re-cut and every period figure
+        downstream would be mislabelled.
+    """
+    night = [i for i, b in enumerate(bands) if _band_bounds(b)[0] >= 24]
+    if len(night) != 1:
+        raise SystemExit(
+            f"[periods] expected exactly one past-midnight band, got {[bands[i] for i in night]}"
+        )
+    if periods[night[0]]["speed_indices"]:
+        raise SystemExit(f"[periods] a speed window was mapped onto the night band {bands[night[0]]!r}")
+    if band_departures:
+        emptiest = min(range(len(bands)), key=lambda i: band_departures[i])
+        if emptiest != night[0]:
+            raise SystemExit(
+                f"[periods] the past-midnight band {bands[night[0]]!r} is no longer the survey's "
+                f"emptiest ({bands[emptiest]!r} is) — departures {band_departures}. "
+                f"The speed windows may now cover the night."
+            )
+
+    steps = [coverage[i + 1] - coverage[i] for i in range(len(coverage) - 1)]
+    jump = max(range(len(steps)), key=lambda i: steps[i])
+    # The window that starts right after the biggest coverage jump, and the clock
+    # hour the axis says it starts at.
+    flat = [(p, w) for p in periods for w in p["speed_indices"]]
+    flat.sort(key=lambda pw: pw[1])
+    after = flat[jump + 1]
+    boundary = after[0]["from"] if after[1] == after[0]["speed_indices"][0] else None
+    if boundary != 6:
+        raise SystemExit(
+            f"[periods] the largest speed-coverage jump ({steps[jump]:+.1f} pts, between windows "
+            f"{jump} and {jump + 1}) does not fall at the 06:00 band boundary, where bus service "
+            f"actually steps up. Coverage per window: {[round(c, 1) for c in coverage]}. "
+            f"The speed columns no longer line up with the survey bands — re-derive the mapping "
+            f"before trusting any per-period figure."
+        )
+
+
+def build_periods(stops_data: dict, speeds: list, n_windows: int = 7) -> list[dict]:
+    """
+    The one time axis the whole dashboard reports on: the survey's bands, verbatim.
+
+    Each period carries the speed windows that fall inside it — two for the first
+    band, one for each other daytime band, none for the night. An empty
+    ``speed_indices`` means the dashboard must report "no speed data" for that
+    period rather than a zero.
+    """
+    bands = stops_data["bands"]
+    band_departures = stops_data["totals"].get("departures_by_band")
+
+    periods = []
+    window = 0
+    for i, band in enumerate(bands):
+        lo, hi = _band_bounds(band)
+        n = 0 if lo >= 24 else WINDOWS_PER_BAND.get(i, 1)
+        periods.append({
+            "label": band,
+            "from": lo,
+            "to": hi,
+            "band_index": i,
+            "speed_indices": list(range(window, window + n)),
+        })
+        window += n
+
+    if window != n_windows:
+        raise SystemExit(
+            f"[periods] mapped {window} speed windows but BUS_SPEED publishes {n_windows}. "
+            f"Bands: {bands}"
+        )
+
+    coverage = _speed_coverage(speeds, n_windows)
+    _validate_alignment(periods, coverage, bands, band_departures)
+
+    print(f"  time axis: {len(periods)} survey bands carrying {window} speed windows")
+    for p in periods:
+        w = p["speed_indices"]
+        cov = (", ".join(f"h{i + 1} {coverage[i]:.1f}% covered" for i in w)) if w else "no speed window"
+        print(f"    {p['label']}  ({p['to'] - p['from']}h)  {cov}")
+    return periods
+
+
 def build_speed_kpis(speeds: list, stops_data: dict | None = None) -> dict:
     """
     Derive dashboard KPIs directly from the clipped speed segments and the station
@@ -88,9 +227,17 @@ def build_speed_kpis(speeds: list, stops_data: dict | None = None) -> dict:
 
     kpis = {
         "segment_count": len(speeds),
-        # Average speed per time-of-day period (P1..P7), across all days/segments.
+        # Average speed per speed window, across all days/segments. Indexed by a
+        # period's `speed_index`, NOT by its position on the axis — the night band
+        # is a period with no speed window, so the two lists differ in length.
         "speed_profile": speed_profile,
     }
+
+    # The shared time axis. Published here rather than written into the frontend,
+    # so the hour bounds the dashboard shows are the survey's own and can never
+    # drift from the bands the boardings are reported in.
+    if stops_data:
+        kpis["periods"] = build_periods(stops_data, speeds)
 
     # City-wide ridership headline. Shipped in kpis.json (fetched on page load) rather
     # than only in stops.json (fetched lazily on first toggle) so the tile has a real
@@ -282,6 +429,14 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
                             stops.append({
                                 "id": sid, "name": srow.get("stop_name", ""),
                                 "lat": float(srow["stop_lat"]), "lon": float(srow["stop_lon"]),
+                                # The public stop code, which is the key the תלת״ן
+                                # survey is joined on (see build_stops). Without it
+                                # the frontend can only match a route's stop to a
+                                # survey station by position, and the opposite
+                                # direction's stop across the street is ~29 m away —
+                                # close enough to be picked up, so a line clicked at
+                                # one kerb would light up both directions.
+                                "code": str(srow.get("stop_code", "")).strip(),
                             })
 
                 routes_out[rid] = {

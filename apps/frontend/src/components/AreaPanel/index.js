@@ -80,8 +80,8 @@ export function AreaPanel({ onAreaChange } = {}) {
   //
   // Several neighbourhoods add up cleanly: these are counts apportioned onto
   // the *official* polygons, which don't overlap, so nobody is counted twice.
-  // (The 250 m analysis catchments do overlap — that's why population is the
-  // one figure the pipeline keeps on the unbuffered boundary.)
+  // (The analysis catchments do overlap — that's why population is the one
+  // figure the pipeline keeps on the unbuffered boundary.)
   function renderPopulation(neighs) {
     const parts = neighs.map(n => n.population).filter(p => p?.total);
     const pop = parts.length ? {

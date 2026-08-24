@@ -1,7 +1,8 @@
 import './TimeFilter.css';
 import { html, $ } from '../../core/dom.js';
 import { state, setState } from '../../core/store.js';
-import { PNAMES, PTIMES, DAYAB } from '../../core/format.js';
+import { DAYAB } from '../../core/format.js';
+import { periods, periodName, hoursLabel, speedIndices, hasSpeed } from '../../core/periods.js';
 import { speedColor } from '../../core/palette.js';
 import { data } from '../../core/data.js';
 
@@ -50,16 +51,24 @@ export function TimeFilter({ onReset } = {}) {
   daysEl.appendChild(avgBtn);
 
   // ── Time-of-day rows ────────────────────────────────────────────────────
-  PNAMES.forEach((name, i) => {
-    const row = html`
-      <div class="prow">
-        <span class="pn">P${i + 1}</span>
-        <span class="pl">${name}</span>
-        <span class="pt">${PTIMES[i]}</span>
-      </div>`;
-    row.addEventListener('click', () => setState({ period: i }));
-    periodsEl.appendChild(row);
-  });
+  // Built from the axis kpis.json ships rather than at construction time: the
+  // hour ranges are the survey's, so they do not exist until the file has landed.
+  function buildPeriods() {
+    periodsEl.replaceChildren();
+    periods.forEach((_, i) => {
+      const speedless = !hasSpeed(i);
+      const row = html`
+        <div class="prow${speedless ? ' no-speed' : ''}"
+             title="${speedless ? 'הסקר מדווח עליות בחלון זה; קובץ המהירויות אינו מכסה אותו' : ''}">
+          <span class="pn">P${i + 1}</span>
+          <span class="pl">${periodName(i)}</span>
+          <span class="pt">${hoursLabel(i)}</span>
+        </div>`;
+      row.addEventListener('click', () => setState({ period: i }));
+      periodsEl.appendChild(row);
+    });
+    sync();
+  }
   allEl.addEventListener('click', () => setState({ period: 'all' }));
 
   // ── Day animation ───────────────────────────────────────────────────────
@@ -76,7 +85,7 @@ export function TimeFilter({ onReset } = {}) {
     setState({ period: 0 });
     let p = 0;
     playing = setInterval(() => {
-      p = (p + 1) % PNAMES.length;
+      p = (p + 1) % (periods.length || 1);
       setState({ period: p });
     }, STEP_MS);
   });
@@ -88,17 +97,34 @@ export function TimeFilter({ onReset } = {}) {
   });
 
   // ── Sparkline ───────────────────────────────────────────────────────────
+  /**
+   * One bar per period, so the sparkline and the pills are the same axis.
+   *
+   * speed_profile is indexed by speed WINDOW, and a period can hold two of them
+   * (04-06) or none (the 00-04 night the speed file does not cover), so a bar's
+   * value is the mean of whatever windows its period holds. The night bar is
+   * drawn empty and captioned rather than dropped: the survey has real boardings
+   * there, and a missing bar would read as a period that does not exist.
+   */
+  function periodSpeed(i) {
+    const idx = speedIndices(i);
+    const vals = idx.map(w => data.speedProfile?.[w]).filter(v => v != null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  }
+
   function buildSpark() {
     sparkEl.replaceChildren();
-    if (!data.speedProfile) return;
+    if (!data.speedProfile || !periods.length) return;
 
-    const known = data.speedProfile.filter(v => v != null);
+    const vals = periods.map((_, i) => periodSpeed(i));
+    const known = vals.filter(v => v != null);
     const max = known.length ? Math.max(...known) : 1;
 
-    data.speedProfile.forEach((v, i) => {
+    vals.forEach((v, i) => {
       const h = v == null ? 0 : (v / max) * 100;
+      const cap = `${periodName(i)} ${hoursLabel(i)}`;
       const bar = html`
-        <div class="spk" title="${PNAMES[i]} ${PTIMES[i]}${v == null ? ' · אין נתונים' : ` · ${v.toFixed(1)} קמ״ש`}">
+        <div class="spk${v == null ? ' no-speed' : ''}" title="${cap}${v == null ? ' · אין נתוני מהירות בחלון זה' : ` · ${v.toFixed(1)} קמ״ש`}">
           <span class="val">${v == null ? '—' : v.toFixed(0)}</span>
           <span class="bar-wrap"><span class="bar" style="height:${h}%;background:${speedColor(v)}"></span></span>
           <span class="lab">P${i + 1}</span>
@@ -121,5 +147,5 @@ export function TimeFilter({ onReset } = {}) {
 
   sync();
 
-  return { el, sync, buildSpark, stopPlaying };
+  return { el, sync, buildPeriods, buildSpark, stopPlaying };
 }
