@@ -56,7 +56,9 @@ createMap(mapEl);
 const header = Header();
 const kpis = KpiBar();
 const timeBadge = TimeBadge();
-const stopPanel = StopPanel();
+// A line lit from a stop's chip row goes into the same route layer the sidebar
+// drives, so the sidebar's list has to re-read which routes are active.
+const stopPanel = StopPanel({ onRoutesChanged: () => areaPanel.renderRoutes() });
 
 const areaPanel = AreaPanel({ onAreaChange: handleAreaChange });
 const timeFilter = TimeFilter({ onReset: handleReset });
@@ -77,6 +79,22 @@ cityBorderLayer.addTo(map);
 speed.speedLayer.addTo(map);
 routes.attachTo(map);
 
+// A drawn line shows its own stops, wherever they are. They are the same station
+// records the stop layer draws, so this only has to re-render that layer — and
+// pull in the survey file first if nothing has needed it yet.
+routes.onChange(() => {
+  if (!data.stops) {
+    loadStops()
+      .then(() => { stops.render(); stops.syncVisibility(); layerToggles.renderStopsLegend(); })
+      .catch(e => console.error('[Stops] failed to load for the drawn line:', e));
+    return;
+  }
+  stops.render();
+  stops.syncVisibility();
+  layerToggles.renderStopsLegend();
+  stopPanel.refresh();
+});
+
 stops.setSelectHandler(() => stopPanel.render());
 
 // ── Reactions ────────────────────────────────────────────────────────────────
@@ -90,7 +108,7 @@ function refreshSpeed() {
 function applyLayerVisibility() {
   speed.setVisible(state.layers);
   destinations.setVisible(state.layers.dest);
-  stops.setVisible(state.layers.stops);
+  stops.syncVisibility();
   layerToggles.syncPanels();
 
   if (state.layers.dest) {
@@ -99,7 +117,11 @@ function applyLayerVisibility() {
       .catch(e => console.error('[Destinations] failed to load:', e));
   }
 
-  if (state.layers.stops) {
+  // Two things put stops on the map: the toggle, and a drawn line bringing its
+  // own. So the redraw is driven by whether anything will be drawn at all —
+  // keying it to the toggle alone would leave a line's stops stale when the
+  // toggle went off, and would close the panel on a stop still sitting on screen.
+  if (state.layers.stops || routes.activeRoutes().length) {
     loadStops()
       .then(() => { stops.render(); layerToggles.renderStopsLegend(); refreshRidership(); })
       .catch(e => console.error('[Stops] failed to load:', e));
@@ -115,7 +137,10 @@ function applyLayerVisibility() {
  * KpiBar.setRidership.
  */
 function refreshRidership() {
-  const stations = data.stops && state.areaRecords.length ? stops.stopsState.visible : null;
+  // inArea, never visible: a drawn line's stops ignore the area filter on purpose,
+  // and rolling them into a neighbourhood's boardings would credit it with stops
+  // in another city.
+  const stations = data.stops && state.areaRecords.length ? stops.stopsState.inArea : null;
   kpis.setRidership(state.areaRecords, data.stopTotals, stations);
 }
 
@@ -209,6 +234,9 @@ async function start() {
   if (data.center) map.setView(data.center, 13);
 
   speed.build();
+  // The period pills and the sparkline are both the time axis kpis.json ships,
+  // so neither can be drawn before loadCore has resolved.
+  timeFilter.buildPeriods();
   timeFilter.buildSpark();
   refreshSpeed();
   refreshRidership();

@@ -1,6 +1,7 @@
 import './KpiBar.css';
 import { html, $ } from '../../core/dom.js';
 import { fmtNum, periodLabel } from '../../core/format.js';
+import { hasSpeed } from '../../core/periods.js';
 
 /**
  * The four headline figures.
@@ -42,12 +43,22 @@ export function KpiBar() {
       value('seg').textContent = text;
     },
 
-    /** Figures straight off the speed layer's recolor pass. */
+    /**
+     * Figures straight off the speed layer's recolor pass.
+     *
+     * The survey and the speed file do not cover the same day: the survey reports
+     * boardings for the 00-04 night band, the speed file has no window there. On
+     * that period the tile says so instead of showing a dash the reader would
+     * take for "no congestion" — the boardings tile beside it stays populated.
+     */
     setSpeedStats({ avgSpeed, congestedPct, segmentCount }, period) {
+      const covered = period === 'all' || hasSpeed(period);
       value('avg').textContent = avgSpeed == null ? '—' : avgSpeed.toFixed(1);
       value('cong').textContent = congestedPct == null ? '—' : congestedPct;
       if (segmentCount) value('seg').textContent = fmtNum(segmentCount);
-      note('avg').textContent = periodLabel(period);
+      note('avg').textContent = covered
+        ? periodLabel(period)
+        : `${periodLabel(period)} · אין נתוני מהירות`;
     },
 
     /** Caption under the segment count: which area the totals are scoped to. */

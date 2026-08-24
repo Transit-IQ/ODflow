@@ -1,6 +1,7 @@
 import './TimeBadge.css';
 import { html, $ } from '../../core/dom.js';
-import { PNAMES, DAYAB, dayLabel, periodLabel } from '../../core/format.js';
+import { DAYAB, dayLabel, periodLabel } from '../../core/format.js';
+import { periodName } from '../../core/periods.js';
 
 /** What the map is currently showing, in words, over the map. */
 export function TimeBadge() {
@@ -17,7 +18,7 @@ export function TimeBadge() {
     el,
     update({ day, period }) {
       const dayPart = day === 'avg' ? 'ממוצע' : DAYAB[day];
-      const periodPart = period === 'all' ? 'כל היום' : PNAMES[period];
+      const periodPart = period === 'all' ? 'כל היום' : periodName(period);
       nowEl.textContent = `${dayPart} · ${periodPart}`;
       subEl.textContent = `${dayLabel(day)} · ${periodLabel(period)}`;
     },

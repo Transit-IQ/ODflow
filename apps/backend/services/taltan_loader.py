@@ -203,10 +203,13 @@ def summarise(stations: list[dict], band_count: int, rider_count: int) -> dict:
     """
     surveyed = [s for s in stations if s["boardings_day"] is not None]
     bands = [0.0] * band_count
+    departures = [0.0] * band_count
     riders = [0.0] * rider_count
     for s in surveyed:
         for i, v in enumerate(s["boardings_by_band"] or []):
             bands[i] += v
+        for i, v in enumerate(s["departures_by_band"] or []):
+            departures[i] += v
         for i, v in enumerate(s["riders"] or []):
             riders[i] += v
 
@@ -216,5 +219,10 @@ def summarise(stations: list[dict], band_count: int, rider_count: int) -> dict:
         "boardings_day": round(sum(s["boardings_day"] for s in surveyed), 1),
         "departures_day": round(sum(s["departures_day"] or 0 for s in surveyed), 1),
         "boardings_by_band": [round(v, 1) for v in bands],
+        # Scheduled calls per band. Rolled up beside the boardings because this is
+        # the figure that says how much service a band actually carries, and the
+        # pipeline reads it to prove no speed window covers the near-empty night
+        # band — see build_dashboard_data._validate_alignment.
+        "departures_by_band": [round(v, 1) for v in departures],
         "riders": [round(v, 1) for v in riders],
     }

@@ -81,7 +81,40 @@
   border-radius: 4px;
   background: var(--panel2);
   border: 1px solid var(--line);
+  /* A chip draws its line on the map, so it is a button now. Only the
+     interaction affordances are added — the resting look is unchanged, because
+     the chip row also reads as a plain list of the lines serving the stop. */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
 }
+
+.chip:hover { border-color: var(--ink3) }
+.chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px }
+
+/* Lit: every route this number resolves to is on the map. The chip stays neutral
+   and lets the dots carry the colour — a line drawn in both directions gets two
+   palette slots, so there is no single accent that could stand for the chip. */
+.chip.on {
+  background: var(--panel);
+  border-color: var(--ink3);
+  font-weight: 600;
+}
+
+/* One dot per drawn route, in the colour that route was drawn in — this is what
+   ties a stroke on the map back to a direction named in the chip's tooltip. */
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* Waiting on the route index, which is fetched on first use. */
+.chip.busy { opacity: .55; cursor: progress }
 
 .bands { display: flex; gap: 2px; align-items: flex-end }
 .band { flex: 1; text-align: center; cursor: default }
