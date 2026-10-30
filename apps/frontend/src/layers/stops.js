@@ -19,6 +19,7 @@ import { pointInArea } from '../core/geo.js';
 import { data } from '../core/data.js';
 import { boardingsFor } from '../core/boardings.js';
 import { stationsForRoutes } from '../core/routeStations.js';
+import { pruneLines } from '../core/suggest.js';
 import * as routes from './routes.js';
 import { stopRamp, mapColors } from '../core/palette.js';
 import { fmtNum, escHtml, periodLabel } from '../core/format.js';
@@ -37,6 +38,7 @@ export const stopsState = {
                  // selected neighbourhood, and summing them into a neighbourhood
                  // figure would inflate it with boardings from another city.
   breaks: [],    // colour-class upper bounds, recomputed from the visible stations
+  removed: new Set(),  // stations קווים מוצעים drops — still drawn, struck through
   selected: null,
 };
 
@@ -124,9 +126,16 @@ export function render() {
         : stopsState.inArea)
     : [];
   const seen = new Set(shown);
-  stopsState.visible = shown.concat(
-    stationsForRoutes(routes.activeRoutes()).filter(s => !seen.has(s))
-  );
+  const lineStops = stationsForRoutes(routes.activeRoutes());
+  stopsState.visible = shown.concat(lineStops.filter(s => !seen.has(s)));
+
+  // קווים מוצעים: which of the drawn lines' stops the proposal drops. They are NOT
+  // removed from `visible` — they stay on the map, struck through, because a
+  // proposal you cannot see the cost of is not reviewable. The set is rebuilt here
+  // rather than stored, so it can never describe a threshold that has since moved.
+  stopsState.removed = state.suggest.on && lineStops.length
+    ? new Set(pruneLines(routes.activeRoutes(), state.suggest.pctMax, state.period).removed)
+    : new Set();
 
   stopsState.breaks = computeBreaks(stopsState.visible);
 
@@ -142,17 +151,22 @@ export function render() {
   for (const s of stopsState.visible) {
     const value = valueFor(s);
     const fill = colorFor(value);
+    // A stop the proposal drops is drawn hollow in the congestion colour: it keeps
+    // its position and its size — so you can still see how much traffic is being
+    // given up — while reading unmistakably as "not called at".
+    const dropped = stopsState.removed.has(s);
     const marker = L.circleMarker([s.lat, s.lon], {
       pane: 'pointPane',
       radius: 1.2*radiusFor(value, max),
-      color: fill ? colors.hairline : hollowRing,
-      weight: fill ? 1 : 1.5,
-      fillColor: fill || 'transparent',
-      fillOpacity: fill ? 0.9 : 0,
+      color: dropped ? colors.cong : (fill ? colors.hairline : hollowRing),
+      weight: dropped ? 2 : (fill ? 1 : 1.5),
+      fillColor: dropped ? 'transparent' : (fill || 'transparent'),
+      fillOpacity: dropped ? 0 : (fill ? 0.9 : 0),
+      dashArray: dropped ? '2,2' : null,
     });
 
-    marker._stroke = fill ? colors.hairline : hollowRing;
-    marker._weight = fill ? 1 : 1.5;
+    marker._stroke = dropped ? colors.cong : (fill ? colors.hairline : hollowRing);
+    marker._weight = dropped ? 2 : (fill ? 1 : 1.5);
 
     // Under a period cut the tooltip names the window and keeps the daily total
     // beside it, so a dot that just shrank can be read against what it was.
@@ -164,6 +178,9 @@ export function render() {
           ? `${fmtNum(value)} עליות · ${escHtml(periodLabel(state.period))}<br>` +
             `<span style="opacity:.7">${fmtNum(s.boardings_day)} עליות ביום</span>`
           : `${fmtNum(value)} עליות ביום`) +
+      (dropped
+        ? `<br><span style="opacity:.85">הוסרה מהקו המוצע · ${fmtNum(s.transfer_pct, 0)}% נסיעות מעבר</span>`
+        : '') +
       '</div>',
       { direction: 'top', opacity: 0.95 }
     );

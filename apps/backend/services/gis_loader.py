@@ -7,7 +7,7 @@ from shapely.geometry import Polygon, LineString
 # NOTE: this module used to import GTFS_DIR aliased as DATA_DIR, so "DATA_DIR" here
 # meant data/gtfs/, not data/. The shapefile lookup below searches the whole data/
 # tree, so it no longer matters where under data/ a layer is filed.
-from paths import DATA_DIR
+from paths import CITY_DIR, CITY_LABEL, DATA_DIR
 
 # Shared state
 _gis_data: Optional[dict] = None
@@ -61,7 +61,16 @@ def _find_shapefile(stem: str) -> str:
     Raises with a directory listing attached, so a miss is diagnosable instead of just
     "could not be opened".
     """
-    matches = sorted(DATA_DIR.glob(f"**/{stem}.shp"))
+    # The active city's own directory is searched first, and only then the rest of
+    # data/. This matters as soon as a second city exists: every city ships a layer
+    # called "City Limits", and a plain glob over data/ would hand back whichever
+    # one happened to sort first — silently building Tel Aviv while asked for Rahat.
+    # National layers (BUS_SPEED, Stations) live outside any city directory and are
+    # still found by the fallback.
+    matches = sorted(CITY_DIR.glob(f"**/{stem}.shp")) + [
+        m for m in sorted(DATA_DIR.glob(f"**/{stem}.shp"))
+        if CITY_DIR not in m.parents
+    ]
     # Require the sibling files pyshp actually needs, so a stray/partial copy doesn't win.
     complete = [m for m in matches if m.with_suffix(".dbf").exists() and m.with_suffix(".shx").exists()]
     if complete:
@@ -93,7 +102,7 @@ def _build_gis_index():
                     "type": "Polygon",
                     "coordinates": [city_wgs84]
                 },
-                "properties": {"name": "Tel Aviv City Limits"}
+                "properties": {"name": f"{CITY_LABEL} City Limits"}
             }
             
             # Create a Shapely polygon in ITM for fast spatial intersection
@@ -151,7 +160,7 @@ def _build_gis_index():
                 "speeds": processed_segments
             }
             
-        print(f"[GIS] Index ready: {len(processed_segments)} speed segments inside Tel Aviv")
+        print(f"[GIS] Index ready: {len(processed_segments)} speed segments inside {CITY_LABEL}")
 
     except Exception as e:
         import traceback

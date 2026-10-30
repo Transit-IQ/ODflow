@@ -282,6 +282,34 @@ Was a hardcoded "~13,000 residents" string in the HaTikva flow-layer popup. Now 
 `municipal/statistical_areas.geojson` (CBS 2022) and rendered per-neighbourhood in the sidebar. The
 real HaTikva figure is **10,040**, not 13,000.
 
+## Synthetic data — the one layer that is not measured
+
+### Junction turning volumes (`נפחי פנייה בצמתים`)
+
+**The counts in this layer are invented.** Nothing in this folder carries
+turning-movement counts, and unlike the sections above — which were deleted rather
+than shown with fabricated numbers — this one is shown, because the geometry it is
+drawn on is real and the layer is labelled as demo data everywhere it appears.
+
+What is real: the junction locations, the street names, the number of legs and each
+leg's bearing. All of it is derived from `roads.geojson` (OSM, via
+`apps/backend/scripts/build_roads.py`) by intersecting named trunk/primary/
+secondary/tertiary ways, clustering crossings within 30 m, and measuring each arm
+25 m out from the centre.
+
+What is invented: every vehicle count. They come from a per-junction seeded PRNG
+with through-movements dominant and AM/PM peaks, scaled by road class.
+
+The distinction is carried in the data (`"mock": true` plus a Hebrew source string
+in `junctions.json`) and surfaced in the UI on the layer switch, in the legend, in
+the map tooltip and at the top of the junction panel — above any figure, not as a
+footnote under it.
+
+To replace it with real data: drop in a turning-count source keyed by junction, and
+swap `apps/backend/services/junctions_mock.py` for a loader that reads it. The
+payload shape (`bands` + per-approach `left`/`through`/`right` arrays) is what the
+frontend consumes; nothing else has to change, and the `mock` flag should then go.
+
 ## Accessing raw data during development
 
 The interactive backend (`../apps/backend/`, `uvicorn main:app --reload`) can query these files directly

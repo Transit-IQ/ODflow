@@ -34,12 +34,15 @@ from pathlib import Path
 from typing import Optional
 
 import pyproj
+import shapefile
 from shapely.geometry import mapping, shape
 from shapely.ops import transform as shapely_transform, unary_union
 
-from paths import DATA_DIR
+from paths import CITY_DIR, CITY_LABEL, DATA_DIR
 
-MUNICIPAL_DIR = DATA_DIR / "municipal"
+# The active city's municipal layers (see paths.CITY_DIRS). National files such as
+# the GTFS feed and the תלת״ן survey are NOT here — they are shared by every city.
+MUNICIPAL_DIR = CITY_DIR
 DESTINATIONS_DIR = MUNICIPAL_DIR / "destinations"
 
 # How far past a neighbourhood's official border still counts as serving it, in
@@ -90,9 +93,38 @@ AGE_BANDS = [
     "g50to59", "g60to69", "g70to79", "g80up",
 ]
 
-# Tel Aviv envelope. Anything outside is a CRS or lat/lon-swap bug, not real data.
-TLV_LON = (34.70, 34.90)
-TLV_LAT = (31.95, 32.20)
+# Sanity envelope: anything outside it is a CRS or lat/lon-swap bug, not real data.
+#
+# This used to be two hardcoded Tel Aviv constants, which is why the pipeline
+# aborted outright on any other city — Rahat sits at latitude 31.39, a long way
+# below Tel Aviv's 31.95 floor. The check itself is worth keeping (a swapped
+# lat/lon pair is silent and ruins everything downstream), so rather than drop it
+# or retype it per city, it is derived from the active city's own boundary.
+#
+# Padded generously: municipal layers legitimately overhang the boundary a little,
+# and the bug this catches misplaces coordinates by whole degrees, not by metres.
+ENVELOPE_PAD_DEG = 0.15
+
+_envelope: tuple[tuple[float, float], tuple[float, float]] | None = None
+
+
+def _city_envelope() -> tuple[tuple[float, float], tuple[float, float]]:
+    """``((lon_min, lon_max), (lat_min, lat_max))`` around the active city."""
+    global _envelope
+    if _envelope is not None:
+        return _envelope
+
+    from services.gis_loader import _find_shapefile, itm_points_to_wgs84
+
+    with shapefile.Reader(_find_shapefile("City Limits")) as sf:
+        e_min, n_min, e_max, n_max = sf.bbox
+    corners = itm_points_to_wgs84([(e_min, n_min), (e_max, n_max)])
+    lats = [lat for lat, _ in corners]
+    lons = [lon for _, lon in corners]
+
+    p = ENVELOPE_PAD_DEG
+    _envelope = ((min(lons) - p, max(lons) + p), (min(lats) - p, max(lats) + p))
+    return _envelope
 
 
 # ── KML parsing ───────────────────────────────────────────────────────────────
@@ -117,9 +149,16 @@ def _parse_coords(block: str) -> list[list[float]]:
     return out
 
 
-def _parse_kml(path: Path) -> list[dict]:
-    """Parse a municipal KML export into GeoJSON-ish features (polygons and points)."""
-    if not path.exists():
+def _parse_kml(path: Optional[Path]) -> list[dict]:
+    """
+    Parse a municipal KML export into GeoJSON-ish features (polygons and points).
+
+    ``None`` means the active city publishes no such layer at all — ``_find_layer_kml``
+    found nothing to point at — and is as empty as a path that does not exist. Both
+    are an absent optional layer, not an error: every caller here degrades to "this
+    city has no population figures / no neighbourhoods" rather than failing the build.
+    """
+    if path is None or not path.exists():
         return []
     kml = path.read_text(encoding="utf-8")
     features: list[dict] = []
@@ -163,7 +202,7 @@ def _parse_kml(path: Path) -> list[dict]:
 
         features.append({"properties": props, "geometry": geometry})
 
-    _assert_in_tel_aviv(features, path.parent.name)
+    _assert_in_city(features, path.parent.name)
     return features
 
 
@@ -177,13 +216,17 @@ def _iter_positions(geometry: dict):
         yield from ring
 
 
-def _assert_in_tel_aviv(features: list[dict], label: str) -> None:
+def _assert_in_city(features: list[dict], label: str) -> None:
+    lon_range, lat_range = _city_envelope()
     for feat in features:
         for lon, lat in _iter_positions(feat["geometry"]):
-            if not (TLV_LON[0] <= lon <= TLV_LON[1] and TLV_LAT[0] <= lat <= TLV_LAT[1]):
+            if not (lon_range[0] <= lon <= lon_range[1] and lat_range[0] <= lat <= lat_range[1]):
                 raise SystemExit(
                     f"[municipal] {label}: coordinate ({lon}, {lat}) falls outside the "
-                    f"Tel Aviv envelope — suspected CRS or lat/lon-swap error."
+                    f"{CITY_LABEL} envelope "
+                    f"(lon {lon_range[0]:.2f}..{lon_range[1]:.2f}, "
+                    f"lat {lat_range[0]:.2f}..{lat_range[1]:.2f}) "
+                    f"— suspected CRS or lat/lon-swap error."
                 )
 
 

@@ -5,22 +5,28 @@
 
 /* ── Sidebar block ───────────────────────────────────────────────────────── */
 .block {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line-soft);
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
 
 .block:last-child { border-bottom: 0 }
 
 /* Each block declares the hue of the thing it controls via --tint; the rule
-   beside its title is the same colour that thing wears on the map. */
+   beside its title is the same colour that thing wears on the map.
+
+   No `text-transform: uppercase` and no wide tracking, both of which this used
+   to carry. Every one of these titles is Hebrew: Hebrew has no letter case, so
+   the transform did nothing at all, while the .1em tracking actively hurt —
+   Hebrew has no inter-letter spacing convention and depends on tight, closed
+   word shapes to stay readable. The pair made the one text on screen that
+   labels everything else the hardest text on screen to read. */
 .block h3 {
   font-family: var(--font-sans);
-  font-size: 10.5px;
-  letter-spacing: .1em;
-  color: var(--ink2);
-  text-transform: uppercase;
-  font-weight: 600;
-  margin-bottom: 9px;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+  font-weight: 700;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -28,14 +34,14 @@
 
 .block h3::before {
   content: "";
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
+  width: 4px;
+  height: 14px;
+  border-radius: 999px;
   background: var(--tint, var(--primary));
   flex: 0 0 auto;
 }
 
-.block h3 + h3 { margin-top: 16px }
+.block h3 + h3 { margin-top: var(--sp-5) }
 
 /* ── Button ──────────────────────────────────────────────────────────────── */
 .btn {
@@ -44,52 +50,53 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 10px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 6px;
   background: var(--primary);
   color: var(--primary-ink);
   border: 1px solid var(--primary);
-  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
+  transition: filter .12s, border-color .12s, color .12s;
 }
 
-.btn:hover { background: var(--primary-hi); border-color: var(--primary-hi) }
+/* demo: hover:brightness-110 */
+.btn:hover { filter: brightness(1.1) }
 
 .btn.ghost {
   background: transparent;
-  border-color: var(--line);
+  border-color: var(--row-line);
   color: var(--ink2);
+  font-weight: 400;
   flex: 0 0 auto;
   padding-inline: 12px;
 }
 
-.btn.ghost:hover { border-color: var(--primary); color: var(--primary); background: transparent }
+.btn.ghost:hover { color: var(--ink); filter: none }
 
 /* ── Layer switch ────────────────────────────────────────────────────────── */
 .toggle {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   padding: 6px 8px;
-  margin-inline: -8px;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   cursor: pointer;
+  transition: background .12s;
 }
 
-.toggle:hover { background: var(--panel2) }
+.toggle:hover { background: var(--row-hover) }
 .toggle.on .tl { color: var(--ink); font-weight: 500 }
 
 /* A live switch wears its own layer's colour (via --tint), so the sidebar reads
    back what is currently drawn on the map. */
 .sw {
-  width: 32px;
-  height: 18px;
-  border-radius: 10px;
-  background: var(--line);
-  border: 1px solid var(--line);
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--sw-off);
   position: relative;
   transition: background .15s;
   flex: 0 0 auto;
@@ -101,41 +108,50 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--ink3);
+  background: #fff;
   top: 2px;
   right: 2px;
-  transition: right .15s, background .15s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  transition: right .15s;
 }
 
-.toggle.on .sw { background: var(--tint, var(--primary)); border-color: transparent }
-.toggle.on .sw::after { background: #fff; right: 16px }
+.toggle.on .sw { background: var(--primary) }
+.toggle.on .sw::after { right: 14px }
 
-.toggle .tl { font-size: 12.5px; flex: 1; color: var(--ink2) }
-.toggle .tc { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto }
+.toggle .tl { font-size: 12px; font-weight: 500; flex: 1; color: var(--ink2) }
+.toggle .tc { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; opacity: .25; transition: opacity .15s }
+.toggle.on .tc { opacity: 1 }
 
 /* ── Swatch legend ───────────────────────────────────────────────────────── */
 .legend {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 11.5px;
+  gap: var(--sp-1);
+  font-size: 12px;
   color: var(--ink2);
+  margin-top: var(--sp-2);
 }
 
 .lg { display: flex; align-items: center; gap: 8px }
 .lg span { width: 22px; height: 9px; border-radius: 2px; flex: 0 0 auto }
 
 /* ── Route list ──────────────────────────────────────────────────────────── */
-.lines-scroll { overflow-y: auto; overscroll-behavior: contain }
-.lines { list-style: none }
+.lines-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--row-line);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  padding: var(--sp-1);
+  scrollbar-width: thin;
+}
+.lines { list-style: none; display: flex; flex-direction: column; gap: 1px }
 
 .lines li {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink2);
-  padding: 5px 7px;
+  padding: var(--sp-2) var(--sp-3);
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   align-items: center;
   cursor: pointer;
   border: 1px solid transparent;
@@ -143,7 +159,7 @@
   transition: background .12s;
 }
 
-.lines li:hover { background: var(--panel2); color: var(--ink) }
+.lines li:hover { background: var(--row-hover); color: var(--ink) }
 
 .lines .num {
   font-family: var(--font-num);
@@ -165,3 +181,52 @@
 }
 
 .lines .ag { font-size: 10px; color: var(--ink3); flex: 0 0 auto }
+
+/* ── Collapsible block ───────────────────────────────────────────────────── */
+/* The heading doubles as the fold control — see the loop in main.js. The chevron
+   is drawn rather than typed so it stays put under RTL, where a glyph arrow
+   would mirror and point the wrong way. */
+.block-toggle {
+  cursor: pointer;
+  user-select: none;
+  justify-content: flex-start;
+}
+
+.block-toggle::after {
+  content: "";
+  margin-inline-start: auto;
+  width: 7px;
+  height: 7px;
+  border-inline-end: 1.6px solid currentColor;
+  border-block-end: 1.6px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .16s ease;
+  opacity: .55;
+  flex: 0 0 auto;
+}
+
+.block-toggle.is-closed::after { transform: rotate(-45deg) translate(-1px, 1px) }
+
+.block-toggle:hover { color: var(--ink) }
+.block-toggle:hover::after { opacity: .9 }
+
+/* A closed block is a title and nothing else, so it should not keep a tall
+   block's padding and leave a gap where its content used to be. */
+.block:has(.block-toggle.is-closed) { padding-block-end: var(--sp-3) }
+.block:has(.block-toggle.is-closed) h3 { margin-bottom: 0 }
+
+/* ── Pill ────────────────────────────────────────────────────────────────── */
+/* The badge the ODflow mockup puts at the end of each row: a tinted capsule
+   carrying one word of status. Tint comes from --pill-tint so a caller can wear
+   its own subject's colour, the same way .block and .toggle do. */
+.pill {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  padding: 1px var(--sp-2);
+  border-radius: 999px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  color: var(--pill-tint, var(--ink2));
+  background: color-mix(in srgb, var(--pill-tint, var(--ink2)) 14%, transparent);
+}

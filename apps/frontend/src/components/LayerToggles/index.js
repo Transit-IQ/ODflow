@@ -1,10 +1,11 @@
 import './LayerToggles.css';
 import { html, $ } from '../../core/dom.js';
 import { state, setState, notify } from '../../core/store.js';
-import { DEST_FAMILIES, destFamilyColor, stopRamp } from '../../core/palette.js';
+import { DEST_FAMILIES, destFamilyColor, stopRamp, juncRamp } from '../../core/palette.js';
 import { data } from '../../core/data.js';
 import { colorOf, familyOf } from '../../layers/destinations.js';
 import { stopsState, valueLabel } from '../../layers/stops.js';
+import { junctionsState, valueLabel as juncValueLabel } from '../../layers/junctions.js';
 import { fmtNum, escHtml } from '../../core/format.js';
 
 /**
@@ -14,14 +15,14 @@ import { fmtNum, escHtml } from '../../core/format.js';
  * the colour that layer wears on the map.
  */
 const LAYERS = [
-  { key: 'speed', label: 'רשת מהירויות אוטובוס',   tint: 'var(--ramp)',   swatch: null },
-  { key: 'cong',  label: 'מוקדי גודש (&lt;15 קמ״ש)', tint: 'var(--c-cong)', swatch: 'background:var(--sp1)' },
+  { key: 'speed', label: 'רשת מהירויות אוטובוס',   tint: 'var(--ramp)',   swatch: 'background:var(--ramp)', note: 'מהירות לפי מקטע' },
+  { key: 'cong',  label: 'מוקדי גודש (&lt;15 קמ״ש)', tint: 'var(--c-cong)', swatch: 'background:var(--sp1)', note: 'מהירות לפי מקטע' },
   // The roads row is held back with the rest of the roads wiring in main.js —
   // layers/roads.js was never committed, so the switch would toggle nothing.
   // Restore it here when that file lands:
   //   { key: 'roads', label: 'רשת דרכים + כיוונים', tint: '#f9b29c', swatch: 'background:#f9b29c' },
-  { key: 'dest',  label: 'מוקדי עניין',     tint: 'var(--c-place)', swatch: 'multi' },
-  { key: 'stops', label: 'תחנות ועליות',            tint: 'var(--c-ride)', swatch: 'background:var(--primary)' },
+  { key: 'dest',  label: 'מוקדי עניין',             tint: 'var(--c-place)', swatch: 'multi', note: 'עירוני' },
+  { key: 'stops', label: 'תחנות ועליות',            tint: 'var(--c-ride)', swatch: 'background:var(--c-ride)', note: 'תלת״ן · GTFS' },
 ];
 
 export function LayerToggles() {
@@ -30,10 +31,12 @@ export function LayerToggles() {
       <h3>שכבות מפה</h3>
       ${LAYERS.map(l => `
         <div class="toggle${state.layers[l.key] ? ' on' : ''}" data-layer="${l.key}" style="--tint:${l.tint}">
-          <span class="sw"></span>
           ${l.swatch === 'multi' ? '<span class="tc tc-multi"></span>'
-            : l.swatch ? `<span class="tc" style="${l.swatch}"></span>` : ''}
+            : l.swatch ? `<span class="tc" style="${l.swatch}"></span>` : '<span class="tc" style="background:var(--tint)"></span>'}
           <span class="tl">${l.label}</span>
+          ${l.note ? `<span class="tn">${l.note}</span>` : ''}
+          ${l.demo ? '<span class="tl-demo">נתוני דמו</span>' : ''}
+          <span class="sw"></span>
         </div>
         ${l.key === 'dest' ? '<div class="dest-cats" hidden></div>' : ''}
         ${l.key === 'stops' ? `
@@ -44,7 +47,8 @@ export function LayerToggles() {
               <span id="transferPctVal">100%</span>
             </div>
           </div>
-          <div id="stopsLegend" class="legend" hidden></div>` : ''}`).join('')}
+          <div id="stopsLegend" class="legend" hidden></div>` : ''}
+`).join('')}
     </div>`;
 
   const catsEl = $(el, '.dest-cats');
@@ -125,6 +129,31 @@ export function LayerToggles() {
       <div class="stops-legend-note">גודל העיגול ביחס למספר העליות</div>`;
   }
 
+  /**
+   * The junction ramp, printed from the breaks the layer actually classified with.
+   *
+   * The demo line is part of the legend rather than a footnote under it: a legend
+   * is read as the key to what the map means, so the fact that these numbers are
+   * invented belongs inside it.
+   */
+  function renderJuncLegend() {
+    // The junction switch is retired, so there is no legend slot to fill.
+    const juncLegendEl = $(el, '#juncLegend');
+    if (!juncLegendEl || !data.junctions) return;
+    const ramp = juncRamp();
+    const rows = ramp.map((c, i) => {
+      const lo = i === 0 ? 0 : junctionsState.breaks[i - 1];
+      const hi = i < junctionsState.breaks.length ? junctionsState.breaks[i] : null;
+      const label = hi == null ? `${fmtNum(lo)}+` : `${fmtNum(lo)}–${fmtNum(hi)}`;
+      return `<div class="lg"><span style="background:${c}"></span> ${label}</div>`;
+    }).join('');
+
+    juncLegendEl.innerHTML = `
+      <div class="stops-legend-title">${escHtml(juncValueLabel())} · ${fmtNum(junctionsState.visible.length)} צמתים</div>
+      ${rows}
+      <div class="stops-legend-note">גודל המעוין ביחס לנפח · הנפחים הם נתוני דמו סינתטיים</div>`;
+  }
+
   /** Show or hide the panels that only make sense when their layer is on. */
   function syncPanels() {
     catsEl.hidden = !state.layers.dest;
@@ -134,5 +163,5 @@ export function LayerToggles() {
 
   syncPanels();
 
-  return { el, renderCategories, renderStopsLegend, syncPanels };
+  return { el, renderCategories, renderStopsLegend, renderJuncLegend, syncPanels };
 }

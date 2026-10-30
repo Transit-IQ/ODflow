@@ -18,11 +18,12 @@ import { html, $ } from './core/dom.js';
 import { state, subscribe } from './core/store.js';
 import { onTheme } from './core/theme.js';
 import { createMap, map, refreshBasemap, DEFAULT_CENTER } from './core/map.js';
-import { data, loadCore, loadDestinations, loadStops } from './core/data.js';
+import { data, loadCore, loadDestinations, loadStops, loadJunctions } from './core/data.js';
 
 import * as speed from './layers/speed.js';
 import * as destinations from './layers/destinations.js';
 import * as stops from './layers/stops.js';
+import * as junctions from './layers/junctions.js';
 import * as routes from './layers/routes.js';
 import * as imported from './layers/imported.js';
 import { cityBorderLayer, drawCityBorder, highlightAreas, clearHighlight } from './layers/boundary.js';
@@ -45,6 +46,8 @@ import { SpeedLegend } from './components/SpeedLegend/index.js';
 import { AreaPanel } from './components/AreaPanel/index.js';
 import { ImportPanel } from './components/ImportPanel/index.js';
 import { StopPanel } from './components/StopPanel/index.js';
+import { JunctionPanel } from './components/JunctionPanel/index.js';
+import { SuggestPanel } from './components/SuggestPanel/index.js';
 import { TimeBadge } from './components/TimeBadge/index.js';
 
 // ── Shell ────────────────────────────────────────────────────────────────────
@@ -70,24 +73,80 @@ const timeBadge = TimeBadge();
 // drives, so the sidebar's list has to re-read which routes are active.
 const stopPanel = StopPanel({ onRoutesChanged: () => areaPanel.renderRoutes() });
 
+const junctionPanel = JunctionPanel();
+
 const areaPanel = AreaPanel({ onAreaChange: handleAreaChange });
 const timeFilter = TimeFilter({ onReset: handleReset });
 const layerToggles = LayerToggles();
+const suggestPanel = SuggestPanel();
 const speedLegend = SpeedLegend();
 const importPanel = ImportPanel({ dropTarget: mapWrap });
 
 root.prepend(header.el);
 mapWrap.prepend(kpis.el);
-mapEl.append(timeBadge.el, stopPanel.el);
+mapEl.append(timeBadge.el, stopPanel.el, junctionPanel.el);
 
 // Sidebar order is the order of work: pick an area, pick a time cut, choose
 // what's drawn, read the ramp, bring your own layer.
+// The proposal block follows the layer switches because it acts on a choice made
+// above it: an area, then lines, and only then "what would this line look like
+// without its pass-through stops".
 aside.append(areaPanel.el, timeFilter.el, layerToggles.el, speedLegend.el, importPanel.el);
+
+/**
+ * Make every sidebar block collapsible, and start the reference ones closed.
+ *
+ * Loosening the spacing fixed the sidebar being *cramped* but made it more
+ * *crowded*: the same six blocks, now 1.7 screens tall, with the time filter
+ * alone taking a third of it. Both complaints are real and they pull in opposite
+ * directions, so the reader gets the dial instead of a compromise — every block
+ * folds, and the two that are reference rather than control (the speed ramp and
+ * the layer import) are folded to begin with.
+ *
+ * Done here rather than in each component because it is a property of the
+ * sidebar, not of any one block: components keep knowing nothing about their
+ * neighbours, and a new block gets this for free. The h3 and the content after
+ * it are already the shape this needs — the body is everything that is not the
+ * block's own first heading.
+ */
+const COLLAPSED_BY_DEFAULT = new Set(['מקרא מהירות', 'ייבוא שכבות']);
+
+for (const block of aside.querySelectorAll('.block')) {
+  const heading = block.querySelector('h3');
+  if (!heading) continue;
+
+  // Nodes are MOVED, not cloned: every component holds live references to its
+  // own elements and re-renders through them, so a copy would leave each
+  // component updating a node that is no longer on screen.
+  const body = document.createElement('div');
+  body.className = 'block-body';
+  while (heading.nextSibling) body.appendChild(heading.nextSibling);
+  block.appendChild(body);
+
+  heading.classList.add('block-toggle');
+  heading.setAttribute('role', 'button');
+  heading.setAttribute('tabindex', '0');
+
+  const apply = open => {
+    body.hidden = !open;
+    heading.classList.toggle('is-closed', !open);
+    heading.setAttribute('aria-expanded', String(open));
+  };
+
+  apply(!COLLAPSED_BY_DEFAULT.has(heading.textContent.trim()));
+
+  const flip = () => apply(body.hidden);
+  heading.addEventListener('click', flip);
+  heading.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+  });
+}
 
 // ── Layer wiring ─────────────────────────────────────────────────────────────
 cityBorderLayer.addTo(map);
 speed.speedLayer.addTo(map);
 routes.attachTo(map);
+junctions.junctionsLayer.addTo(map);
 
 // A drawn line shows its own stops, wherever they are. They are the same station
 // records the stop layer draws, so this only has to re-render that layer — and
@@ -95,7 +154,12 @@ routes.attachTo(map);
 routes.onChange(() => {
   if (!data.stops) {
     loadStops()
-      .then(() => { stops.render(); stops.syncVisibility(); layerToggles.renderStopsLegend(); })
+      .then(() => {
+        stops.render();
+        stops.syncVisibility();
+        layerToggles.renderStopsLegend();
+        suggestPanel.render();
+      })
       .catch(e => console.error('[Stops] failed to load for the drawn line:', e));
     return;
   }
@@ -103,9 +167,11 @@ routes.onChange(() => {
   stops.syncVisibility();
   layerToggles.renderStopsLegend();
   stopPanel.refresh();
+  suggestPanel.render();
 });
 
 stops.setSelectHandler(() => stopPanel.render());
+junctions.setSelectHandler(() => junctionPanel.render());
 
 // ── Reactions ────────────────────────────────────────────────────────────────
 
@@ -119,7 +185,19 @@ function applyLayerVisibility() {
   speed.setVisible(state.layers);
   destinations.setVisible(state.layers.dest);
   stops.syncVisibility();
+  junctions.setVisible(state.layers.junc);
   layerToggles.syncPanels();
+
+  if (state.layers.junc) {
+    loadJunctions()
+      .then(() => { junctions.render(); layerToggles.renderJuncLegend(); })
+      .catch(e => console.error('[Junctions] failed to load:', e));
+  } else {
+    // Closing the panel with the layer is not tidiness: its marker has just left
+    // the map, and a panel describing a junction the reader can no longer point
+    // at is a figure with nothing behind it.
+    junctionPanel.close();
+  }
 
   if (state.layers.dest) {
     loadDestinations()
@@ -168,6 +246,18 @@ subscribe((s, changed) => {
     stops.render();
     layerToggles.renderStopsLegend();
     stopPanel.refresh();
+    // The proposal's boardings figures are period-dependent too — the stop counts
+    // hold still, but "% of boardings retained" is a different number at 08:00.
+    suggestPanel.render();
+  }
+
+  // Junction volumes are published per band, so a period step re-reads every
+  // diamond. Unlike the stops, this has no dependence on `day`: the counts are a
+  // weekday profile and have nothing to say about א׳ vs ה׳.
+  if (changed.has('period') && data.junctions && state.layers.junc) {
+    junctions.render();
+    layerToggles.renderJuncLegend();
+    junctionPanel.refresh();
   }
 
   if (changed.has('layers')) applyLayerVisibility();
@@ -180,10 +270,30 @@ subscribe((s, changed) => {
     stopPanel.refresh();
   }
 
+  // The proposal redraws the drawn lines' stops (struck through, where it drops
+  // them) and rewrites its own tiles. It needs the survey file for transfer_pct,
+  // so a mode switch with nothing loaded yet pulls it in first.
+  if (changed.has('suggest')) {
+    suggestPanel.render();
+    if (data.stops) {
+      stops.render();
+      stopPanel.refresh();
+    } else if (s.suggest.on) {
+      loadStops()
+        .then(() => { stops.render(); suggestPanel.render(); stopPanel.refresh(); })
+        .catch(e => console.error('[Suggest] failed to load stops for the proposal:', e));
+    }
+  }
+
   if (changed.has('area')) {
     speed.computeMembership();
     kpis.setScope(s.areaName);
     refreshSpeed();
+    if (data.junctions && s.layers.junc) {
+      junctions.render();
+      layerToggles.renderJuncLegend();
+      junctionPanel.refresh();
+    }
     if (data.destinations && s.layers.dest) destinations.render();
     if (data.stops) {
       stops.render();
@@ -225,7 +335,7 @@ onTheme(() => {
   refreshBasemap();
   speed.build();
   refreshSpeed();
-  timeFilter.buildSpark();
+  timeFilter.buildPeriods();
   drawCityBorder(data.border);
   if (state.areaRecords.length) highlightAreas(state.areaRecords);
   routes.refresh();
@@ -237,6 +347,11 @@ onTheme(() => {
     layerToggles.renderStopsLegend();
     stopPanel.refresh();
   }
+  if (data.junctions) {
+    junctions.render();
+    layerToggles.renderJuncLegend();
+    junctionPanel.refresh();
+  }
 });
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -246,6 +361,9 @@ async function start() {
 
   const { segmentsFailed } = await loadCore();
 
+  // The city is named from the data, never from markup — see Header.setCity.
+  header.setCity(data.city?.name);
+
   drawCityBorder(data.border);
   if (data.center) map.setView(data.center, 13);
 
@@ -253,9 +371,9 @@ async function start() {
   // The period pills and the sparkline are both the time axis kpis.json ships,
   // so neither can be drawn before loadCore has resolved.
   timeFilter.buildPeriods();
-  timeFilter.buildSpark();
   refreshSpeed();
   refreshRidership();
+  suggestPanel.render();
   applyLayerVisibility();
 
   if (segmentsFailed) kpis.setSegmentError('שגיאת נתונים');

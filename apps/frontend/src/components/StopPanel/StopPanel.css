@@ -178,3 +178,26 @@
 
 .stop-link:hover { border-color: var(--primary); color: var(--ink) }
 .stop-src { font-size: 9.5px; color: var(--ink3); margin-top: 10px; text-align: center }
+
+/* The proposal's verdict on this stop. Colour-coded to match the map: the
+   congestion hue is what a dropped dot wears out there, so the panel and the
+   marker agree without the reader having to work it out. */
+.stop-verdict {
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.stop-verdict.is-dropped {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--c-cong) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-cong) 45%, transparent);
+}
+
+.stop-verdict.is-kept {
+  color: var(--ink2);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+}

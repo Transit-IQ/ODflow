@@ -9,15 +9,14 @@
   width: 100%;
   padding: 7px 9px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--panel2);
+  border: 1px solid var(--row-line);
+  background: var(--well);
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 12px;
   font-family: var(--font-sans);
 }
 
-.neigh-search:hover { border-color: var(--primary) }
-.neigh-search:focus { outline: none; border-color: var(--primary) }
+.neigh-search:focus { outline: none; border-color: var(--c-place) }
 
 .neigh-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px }
 
@@ -27,8 +26,8 @@
   gap: 4px;
   padding: 3px 7px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--c-place) 14%, transparent);
+  border: 0;
+  background: color-mix(in srgb, var(--c-place) 15%, transparent);
   color: var(--ink);
   font-size: 10.5px;
   font-family: var(--font-sans);
@@ -61,26 +60,54 @@
 .neigh-clear:hover { text-decoration: underline }
 
 .neigh-list {
-  max-height: 190px;
+  max-height: 176px;
   overflow-y: auto;
-  border: 1px solid var(--line);
+  /* Inset, not raised. The demo sinks its scrolling lists into the surface with
+     a wash of black and a translucent hairline; lifting them onto --panel2
+     instead made each list look like another panel competing with the sidebar. */
+  border: 1px solid var(--row-line);
   border-radius: var(--radius-sm);
-  background: var(--panel2);
+  background: var(--well);
+  padding: var(--sp-1);
+  scrollbar-width: thin;
 }
 
 .neigh-opt {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  /* The demo's row: 8px/6px padding, 12px text, a 4px corner, muted until
+     picked. Selected rows take a 15% wash of the block's own violet and step up
+     to full ink — the hue says which block the selection belongs to, which a
+     generic highlight would not. */
+  gap: var(--sp-2);
+  padding: 6px var(--sp-2);
+  border-radius: 4px;
   font-size: 12px;
   color: var(--ink2);
   cursor: pointer;
+  transition: background .12s, color .12s;
 }
 
-.neigh-opt:hover { background: color-mix(in srgb, var(--c-place) 8%, transparent) }
-.neigh-opt.on { color: var(--ink); font-weight: 600 }
-.neigh-opt input { accent-color: var(--c-place); cursor: pointer; flex: 0 0 auto }
+.neigh-opt:hover { background: var(--row-hover) }
+.neigh-opt.on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--c-place) 15%, transparent);
+}
+/* The input stays — the picker is multi-select — but is drawn as the demo's 6px
+   status dot: grey until picked, the block's violet once it is. */
+.neigh-opt input {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--ink3);
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.neigh-opt input:checked { background: var(--c-place) }
 
 .neigh-empty { padding: 8px; font-size: 11px; color: var(--ink3); text-align: center }
 
@@ -88,21 +115,13 @@
   font-size: 11px;
   color: var(--ink2);
   margin-bottom: 8px;
-  padding: 6px 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   line-height: 1.5;
 }
 
 .neigh-header b { color: var(--ink); font-weight: 600 }
 
 .neigh-stats {
-  margin: 8px 0;
-  padding: 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--panel2);
+  margin: 8px 0 var(--sp-4);
 }
 
 .neigh-stat-row { display: flex; gap: 6px; text-align: center }
@@ -176,7 +195,6 @@
 .neigh-color-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto }
 
 .lines li.neigh-active {
-  background: var(--panel2);
-  border-color: var(--line);
+  background: var(--row-hover);
   color: var(--ink);
 }

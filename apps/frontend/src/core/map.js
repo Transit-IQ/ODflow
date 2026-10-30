@@ -7,20 +7,44 @@
 
 import { isLight, currentTheme } from './theme.js';
 
-// Light mode uses Voyager rather than the flat grey Positron: it carries parks,
-// water and built-up land in soft colour, which is context a transit planner
-// actually reads off the map. Dark mode keeps the neutral dark base and is
-// tinted to the brand navy in CSS (see .basemap in styles/base.css).
+// Esri's Canvas Gray service, base and labels kept as two separate rasters.
+//
+// This used to be CARTO (Voyager light / Dark Matter). CARTO retired keyless
+// access to basemaps.cartocdn.com, and it does not fail the way a dead endpoint
+// normally would: every tile still answers HTTP 200, with a watermark PNG reading
+// "API KEY REQUIRED" painted across it. Nothing throws, no request 404s, and the
+// map simply fills with the watermark — which is why this looked like a rendering
+// bug rather than a provider change.
+//
+// Canvas Gray is the keyless replacement that keeps the shape this module is built
+// on: a label-free base with a matching label raster on top, in both themes, which
+// is the split labelOpacity() and refreshBasemap() exist to drive. A single-image
+// basemap would have cost the label control entirely.
+//
+// Note the {z}/{y}/{x} order — Esri's REST tile path is row-before-column, the
+// reverse of the XYZ convention. There is no {s} subdomain and no {r} retina
+// variant, so both are gone from the options below rather than left as decoration.
 const TILES = {
   dark: {
-    base: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    labels: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    base: 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    labels: 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
   },
   light: {
-    base: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-    labels: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
+    base: 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    labels: 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
   },
 };
+
+// Canvas Gray is only rendered to z16. Past that it does not 404 — it serves a
+// placeholder tile reading "Map data not yet available", so a bare maxZoom of 19
+// would print that sentence across the city at the exact zooms you use to look at
+// one kerb. maxNativeZoom stops the requests at 16 and lets Leaflet upscale those
+// tiles the rest of the way: soft at z19, but a real map. The dashboard's own
+// views sit at z13–15, where the tiles are native.
+const TILE_OPTS = { maxZoom: 19, maxNativeZoom: 16 };
+
+// Required by the tile terms, and the map credited nobody before this.
+const ATTRIBUTION = 'Esri, HERE, Garmin, © OpenStreetMap contributors';
 
 /**
  * Draw order, low to high. Leaflet's own overlayPane is 400 and holds the speed
@@ -49,7 +73,11 @@ const PANES = {
   pointPane: 420,
 };
 
-export const DEFAULT_CENTER = [32.08, 34.78];
+// Where the map sits for the few hundred milliseconds before border.json lands.
+// It is NOT the city: `main.js` recentres on the border's own midpoint as soon as
+// loadCore resolves, and the reset button uses that too. Kept as a literal only
+// because Leaflet needs some view to initialise with, before any data exists.
+export const DEFAULT_CENTER = [31.39, 34.75];
 
 export let map = null;
 let baseTiles = null;
@@ -64,9 +92,16 @@ export function createMap(el) {
   // bottom-left for the time badge.
   L.control.zoom({ position: 'topright' }).addTo(map);
 
+  // Bottom-right is the one free corner: the stop-detail panel owns the left
+  // edge and the time badge the bottom-left. `prefix: false` drops Leaflet's own
+  // flag link so the credit is only the tile source.
+  L.control.attribution({ position: 'bottomright', prefix: false })
+    .addAttribution(ATTRIBUTION)
+    .addTo(map);
+
   const theme = currentTheme();
-  baseTiles = L.tileLayer(TILES[theme].base, { maxZoom: 19, subdomains: 'abcd', className: 'basemap' }).addTo(map);
-  labelTiles = L.tileLayer(TILES[theme].labels, { maxZoom: 19, subdomains: 'abcd', opacity: labelOpacity() }).addTo(map);
+  baseTiles = L.tileLayer(TILES[theme].base, { ...TILE_OPTS, className: 'basemap' }).addTo(map);
+  labelTiles = L.tileLayer(TILES[theme].labels, { ...TILE_OPTS, opacity: labelOpacity() }).addTo(map);
 
   for (const [name, z] of Object.entries(PANES)) {
     map.createPane(name).style.zIndex = String(z);
@@ -76,7 +111,10 @@ export function createMap(el) {
 }
 
 function labelOpacity() {
-  return isLight() ? 0.8 : 0.7;
+  // Held well back. Esri's reference layer names every village for 30 km around,
+  // in Hebrew AND Latin, and at full strength that bilingual thicket read as the
+  // busiest thing on a map whose subject is the coloured network on top of it.
+  return isLight() ? 0.62 : 0.5;
 }
 
 /** Swap the basemap when the theme flips. */

@@ -19,11 +19,15 @@ export const data = {
   speedProfile: null,    // average speed per SPEED WINDOW — indexed by a period's
                          // speed_indices, not by the period's own position
   stopTotals: null,      // city-wide ridership roll-up from kpis.json
+  city: null,            // { name, key } — which city this build describes
   destinations: null,    // { categories, points } — lazy
   stops: null,           // { stations, bands, rider_types, source } — lazy
   neighbourhoods: [],    // selectable areas
   routesById: null,      // route_id → route record — lazy
   roads: null,           // GeoJSON FeatureCollection — lazy
+  junctions: null,       // { mock, source, bands, junctions } — lazy. `mock` is true:
+                         // the counts are synthetic (see services/junctions_mock.py)
+                         // and every consumer is expected to say so on screen.
 };
 
 async function getJson(name) {
@@ -65,6 +69,9 @@ export async function loadCore() {
     // City-wide ridership totals ride along in kpis.json so the boardings tile
     // has a real figure before anyone opens the (lazily fetched) stop layer.
     data.stopTotals = kpis.value.stops || null;
+    // Which city the pipeline built. Everything that names the city reads this,
+    // so a rebuild for another city renames the UI with it.
+    data.city = kpis.value.city || null;
   }
 
   return { segmentsFailed: segments.status === 'rejected' };
@@ -112,5 +119,12 @@ export function loadRoads() {
   return once('roads', async () => {
     data.roads = await getJson('roads.geojson');
     return data.roads;
+  });
+}
+
+export function loadJunctions() {
+  return once('junctions', async () => {
+    data.junctions = await getJson('junctions.json');
+    return data.junctions;
   });
 }

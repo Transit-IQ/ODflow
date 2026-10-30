@@ -4,17 +4,25 @@ import { fmtNum, periodLabel } from '../../core/format.js';
 import { hasSpeed } from '../../core/periods.js';
 
 /**
- * The four headline figures.
+ * The headline figures, in the ODflow demo's order and colours.
  *
- * `tint` is the cap colour and `tone` the figure colour, both keyed to the layer
- * the tile describes — speed to the band ramp, congestion to rose, the network
- * to blue, ridership to teal.
+ * `tint` is the cap rule and `tone` the figure. The demo keeps them different on
+ * purpose: the rule names the layer in that layer's full-strength hue, while the
+ * figure is printed a step lighter so 22px of bold stays legible on the dark
+ * surface. Only the speed tile has no tone — it is capped with the whole band
+ * ramp, so its figure stays plain ink rather than picking one band's colour.
+ *
+ * Order mirrors the demo: speed, congestion, boardings. Its two other tiles are
+ * deliberately not reproduced — נפחי תנועה בצמתים because its only source here is
+ * the synthetic junction layer, and כיסוי תחבורה ציבורית because it needs a
+ * population layer Rahat does not have. מקטעי כביש בניתוח has no demo counterpart
+ * and sits last.
  */
 const TILES = [
-  { id: 'avg',   label: 'מהירות אוטובוס ממוצעת', unit: 'קמ״ש',    tint: 'var(--ramp)',    note: 'ממוצע כל היום' },
-  { id: 'cong',  label: 'מקטעים בגודש',          unit: '% מהרשת', tint: 'var(--c-cong)',  tone: 'var(--c-cong)', note: 'מתחת ל־15 קמ״ש' },
-  { id: 'seg',   label: 'מקטעי כביש בניתוח',     unit: '',        tint: 'var(--c-net)',   note: 'ברחבי העיר' },
-  { id: 'board', label: 'עליות לאוטובוס ביום',   unit: '',        tint: 'var(--c-ride)',  tone: 'var(--c-ride)', note: 'סקר תחנות' },
+  { id: 'avg',   label: 'מהירות אוטובוס ממוצעת', unit: 'קמ״ש',    tint: 'var(--ramp)',   note: 'ממוצע כל היום' },
+  { id: 'cong',  label: 'מקטעים בגודש',          unit: '% מהרשת', tint: 'var(--c-cong)', tone: 'var(--tone-cong)', note: 'מתחת ל־15 קמ״ש' },
+  { id: 'board', label: 'עליות לאוטובוס',        unit: '',        tint: 'var(--c-ride)', tone: 'var(--tone-ride)', note: 'סקר תחנות' },
+  { id: 'seg',   label: 'מקטעי כביש בניתוח',     unit: '',        tint: 'var(--c-net)',  note: 'ברחבי העיר' },
 ];
 
 export function KpiBar() {
@@ -65,6 +73,7 @@ export function KpiBar() {
     setScope(areaName) {
       note('seg').textContent = areaName ? `בגבולות ${areaName}` : 'ברחבי העיר';
     },
+
 
     setSegmentError(text) {
       value('seg').textContent = text;

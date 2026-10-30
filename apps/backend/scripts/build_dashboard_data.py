@@ -16,14 +16,14 @@ import re
 import sys
 from pathlib import Path
 
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, box, mapping, shape
 from shapely.prepared import prep
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from services import gtfs_loader, gis_loader, municipal_loader, taltan_loader  # noqa: E402
-from paths import FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
+from services import gtfs_loader, gis_loader, junctions_mock, municipal_loader, taltan_loader  # noqa: E402
+from paths import ACTIVE_CITY, CITY_LABEL, FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
 
 # The Israeli MOT GTFS publishes a new route_id per timetable revision, so
 # the "same" real-world line shows up as many route_long_name values that
@@ -250,6 +250,11 @@ def build_speed_kpis(speeds: list, stops_data: dict | None = None) -> dict:
             "source": stops_data["source"],
         }
 
+    # Which city this build describes. The frontend used to have "תל אביב-יפו" typed
+    # into its header, which survived a rebuild for another city and labelled Rahat's
+    # data as Tel Aviv's. The city is a property of the data, so it travels with it.
+    kpis["city"] = {"name": CITY_LABEL, "key": ACTIVE_CITY}
+
     return kpis
 
 
@@ -403,8 +408,20 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
             route_ids.update(stop_routes.get(sid, frozenset()))
 
         keep_cols = [c for c in ["route_id", "route_short_name", "agency_id", "route_long_name"] if c in routes_df.columns]
-        df = routes_df[routes_df["route_id"].isin(route_ids)][keep_cols].copy()
-        df["_dedup_name"] = df["route_long_name"].map(_dedup_key) if "route_long_name" in df.columns else ""
+        df = routes_df.loc[routes_df["route_id"].isin(route_ids), keep_cols]
+        # `.assign` rather than `df["_dedup_name"] = …`, and the difference is not
+        # style. Under pandas 2.2.2 on Python 3.14, DataFrame.__setitem__ raises a
+        # spurious "ChainedAssignmentError" FutureWarning whenever the frame has any
+        # other live reference — which it always does here. The warning is wrong (a
+        # freshly built frame triggers it too, and neither .copy() nor .loc nor
+        # assigning a plain list avoids it), but it fired once per neighbourhood and
+        # buried the pipeline's actual output under twenty screens of boilerplate.
+        # `.assign` returns a new frame instead of mutating one, so it never trips
+        # the check. Behaviour is identical.
+        df = df.assign(
+            _dedup_name=df["route_long_name"].map(_dedup_key)
+            if "route_long_name" in df.columns else ""
+        )
         dedup_cols = [c for c in ["route_short_name", "agency_id", "_dedup_name"] if c in df.columns]
         df = df.drop_duplicates(subset=dedup_cols).drop(columns=["_dedup_name"])
         df = df[df["route_id"].isin(route_shape)]
@@ -486,6 +503,59 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
     return {"neighbourhoods": neighbourhoods_result, "routes": routes_out}
 
 
+def build_junctions_layer(bands: list[str], border: dict) -> None:
+    """
+    Write ``junctions.json`` — signalized-junction turning volumes.
+
+    The counts are synthetic; the junctions themselves are not. See
+    ``services/junctions_mock.py`` for exactly which half is invented and why the
+    payload announces it.
+
+    Its input is ``roads.geojson``, which is produced by the *other* script,
+    ``build_roads.py``, out of an OSM extract this pipeline never reads. That makes
+    it the one output here with a prerequisite outside its own run, so a missing
+    file is reported and skipped rather than raised: nobody should lose a whole
+    rebuild of the speed network because an optional demo layer had nothing to
+    stand on.
+    """
+    roads_path = OUT_DIR / "roads.geojson"
+    if not roads_path.exists():
+        print(f"=== No {roads_path.relative_to(ROOT)} — skipping junctions layer ===")
+        print("    (run scripts/build_roads.py first to generate it)")
+        return
+
+    print("=== Building signalized-junction layer (MOCK volumes, real geometry) ===")
+    payload = junctions_mock.build_junctions(roads_path, bands)
+
+    # roads.geojson is a per-city artefact, and it is NOT rebuilt by this script —
+    # it comes from build_roads.py and an OSM extract. So a city switch can leave
+    # the previous city's roads sitting in place, and the junctions derived from
+    # them land tens of kilometres from the map the dashboard is drawing. That
+    # happened on the first Rahat run: Tel Aviv junctions, Rahat border, no error.
+    #
+    # Dropping the out-of-area ones silently would be just as bad, because the
+    # result is an empty layer that looks like "this city has no junctions". So the
+    # mismatch is reported and the stale file is left untouched rather than
+    # overwritten with a wrong one.
+    city = shape(border["geometry"])
+    inside = [j for j in payload["junctions"] if city.contains(Point(j["lon"], j["lat"]))]
+
+    if not inside:
+        print(f"  !! none of the {len(payload['junctions'])} junctions fall inside {CITY_LABEL}.")
+        print(f"     {roads_path.relative_to(ROOT)} describes a different city — rebuild it")
+        print("     for this one. Leaving the existing junctions.json untouched.")
+        return
+
+    dropped = len(payload["junctions"]) - len(inside)
+    if dropped:
+        print(f"  dropped {dropped} junctions outside the city boundary")
+    payload["junctions"] = inside
+
+    legs = sum(len(j["approaches"]) for j in inside)
+    print(f"  {len(inside)} junctions, {legs} approaches — counts are synthetic, flagged mock:true")
+    write_json("junctions.json", payload)
+
+
 def main():
     idx = build_gtfs_index()
     gis = build_gis_index()
@@ -497,19 +567,27 @@ def main():
     # neighbourhood is written down in this repo by hand.
     neighbourhoods_config = municipal_loader.load_neighbourhood_config()
     if not neighbourhoods_config:
-        raise SystemExit(
-            "No neighbourhoods found — expected an official polygon layer at "
-            f"{municipal_loader.NEIGHBOURHOODS_KML or 'data/municipal/neighbourhoods/export.kml'}"
+        # Not fatal. A city whose municipality has not supplied a neighbourhood
+        # layer still has a complete stop, speed and survey picture — all three come
+        # from national files clipped to the city boundary — and refusing to build
+        # any of it for want of an optional municipal polygon set was blocking the
+        # whole dashboard on one email. The area picker degrades to whole-city.
+        print(
+            f"=== No neighbourhood layer for {CITY_LABEL} — "
+            f"the area picker will be empty and every figure will be city-wide ==="
         )
     boundaries = municipal_loader.build_boundaries(neighbourhoods_config)
     # Service catchments: the same polygons grown outwards, so a stop just across
     # the border still counts for the neighbourhood it plainly serves.
     analysis_boundaries = municipal_loader.build_analysis_boundaries(boundaries)
-    print(
-        f"=== Loaded {len(neighbourhoods_config)} official municipal neighbourhoods "
-        f"from {municipal_loader.NEIGHBOURHOODS_KML.relative_to(ROOT)} "
-        f"(analysis catchment: border + {municipal_loader.ANALYSIS_BUFFER_M} m) ==="
-    )
+    if neighbourhoods_config:
+        # The source path is printed from the loader rather than assumed, and only
+        # when there IS one — it is None for a city with no neighbourhood layer.
+        print(
+            f"=== Loaded {len(neighbourhoods_config)} official municipal neighbourhoods "
+            f"from {municipal_loader.NEIGHBOURHOODS_KML.relative_to(ROOT)} "
+            f"(analysis catchment: border + {municipal_loader.ANALYSIS_BUFFER_M} m) ==="
+        )
 
     destinations = municipal_loader.load_destinations()
     if destinations["categories"]:
@@ -518,7 +596,7 @@ def main():
             f"across {len(destinations['categories'])} categories ==="
         )
     else:
-        print("=== No data/municipal/destinations/ — destinations layer will be empty ===")
+        print(f"=== No destinations layer for {CITY_LABEL} — \u05de\u05d5\u05e7\u05d3\u05d9 \u05e2\u05e0\u05d9\u05d9\u05df will be empty ===")
 
     statistical_areas = municipal_loader.load_statistical_areas()
     if statistical_areas:
@@ -533,7 +611,6 @@ def main():
     trips_by_route = {rid: grp for rid, grp in idx["trips"].groupby("route_id")}
 
     print("=== Writing static JSON for frontend ===")
-    write_json("border.json", gis["border"])
     write_json("speeds.json", gis["speeds"])
     write_json("kpis.json", build_speed_kpis(gis["speeds"], stops_data))
     # Fetched lazily by the frontend the first time the destinations layer is toggled
@@ -546,7 +623,16 @@ def main():
     # neighbourhood is actually selected) — avoids loading several MB of
     # route shapes up front for users who never open the picker.
     write_json("neighbourhoods.json", neighbourhoods_data["neighbourhoods"])
+
+    # The City Limits polygon runs north of the last neighbourhood's catchment as a
+    # flat edge with a spike, so the drawn outline is cut at the catchments' northern
+    # edge. Only the outline is clipped; every layer was built on the full polygon.
+    north = max(n["analysis_bbox"]["max_lat"] for n in neighbourhoods_data["neighbourhoods"])
+    outline = shape(gis["border"]["geometry"]).intersection(box(-180, -90, 180, north))
+    write_json("border.json", {**gis["border"], "geometry": mapping(outline)})
     write_json("neighbourhood_routes.json", neighbourhoods_data["routes"])
+
+    build_junctions_layer(stops_data["bands"], gis["border"])
 
     print("Done.")
 

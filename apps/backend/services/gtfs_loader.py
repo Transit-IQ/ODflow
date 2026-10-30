@@ -123,9 +123,10 @@ def _build_index():
                        "stop_sequence": "int32", "departure_time": "category"},
             )
             # fillna on a categorical needs the fill value to be a known category first.
-            if "00:00:00" not in st["departure_time"].cat.categories:
-                st["departure_time"] = st["departure_time"].cat.add_categories(["00:00:00"])
-            st["departure_time"] = st["departure_time"].fillna("00:00:00")
+            departures = st["departure_time"]
+            if "00:00:00" not in departures.cat.categories:
+                departures = departures.cat.add_categories(["00:00:00"])
+            st = st.assign(departure_time=departures.fillna("00:00:00"))
             st = st.sort_values(["trip_id", "stop_sequence"])
 
             # Build trip_stops. Rows are already ordered by stop_sequence within each
@@ -138,9 +139,13 @@ def _build_index():
             )
 
             print("[GTFS] Computing frequency/hourly distribution...")
-            first_dep = st.drop_duplicates(subset="trip_id", keep="first")[["trip_id", "departure_time"]].copy()
-            first_dep["hour"] = (
-                first_dep["departure_time"].str.split(":").str[0]
+            # `.assign` rather than an item assignment: see the note in
+            # scripts/build_dashboard_data.py — pandas 2.2.2 on Python 3.14 emits a
+            # spurious ChainedAssignmentError warning from DataFrame.__setitem__
+            # that no amount of copying avoids. Same result, no noise.
+            first_dep = st.drop_duplicates(subset="trip_id", keep="first")[["trip_id", "departure_time"]]
+            first_dep = first_dep.assign(
+                hour=first_dep["departure_time"].str.split(":").str[0]
                 .apply(lambda h: int(h) % 24 if str(h).isdigit() else 0)
             )
             trip_route = trips[["trip_id", "route_id"]].drop_duplicates()

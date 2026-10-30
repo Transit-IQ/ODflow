@@ -8,22 +8,44 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces — site --background / --card / --muted */
+  /* Surfaces — the ODflow site's own --background / --card / --muted, converted
+     from the HSL it declares them in, so the product and the marketing mockup are
+     literally the same colours rather than two near-misses of one navy.
+       --background: 219 61% 15%  ->  #0f1f3e
+       --card:       218 53% 18%  ->  #162746
+       --muted:      214 52% 25%  ->  #1f3b61
+     Separation between them comes from the borders and the translucent row fills
+     below, the way the mockup gets it — not from pulling the surfaces apart. */
   --bg: #0f1f3e;
-  --panel: #16294a;
+  --panel: #162746;
   --panel2: #1b3155;
   --line: #1f3b61;
-  --line-soft: rgba(255, 255, 255, .07);
+  --line-soft: rgba(255, 255, 255, .06);
+
+  /* The mockup builds every row out of translucent white over the card, not out
+     of another opaque navy. That is what keeps a list of twenty rows from reading
+     as twenty competing panels. */
+  --row: rgba(255, 255, 255, .035);
+  --row-hover: rgba(255, 255, 255, .07);
+  --row-line: rgba(255, 255, 255, .08);
+  /* Scrolling lists sink into the surface rather than sitting on it. */
+  --well: rgba(0, 0, 0, .1);
+  --sw-off: rgba(255, 255, 255, .1);   /* demo: bg-white/10 on an unlit switch */
 
   /* Ink — site --foreground / --muted-foreground */
   --ink: #f5f5f5;
   --ink2: #94a3b8;
   --ink3: #6b7b93;
 
-  /* Brand — site --primary (teal) / --secondary (blue) / --accent (red) */
-  --primary: #14b8a6;
-  --primary-hi: #2dd4bf;
-  --primary-ink: #06231f;
+  /* Brand — the site's own --primary 175 84% 32% -> #0d968b, with
+     --primary-foreground 0 0% 100% -> white.
+     This is CHROME teal: buttons, switches, selected states. It is deliberately
+     NOT the same teal as the data. The demo draws boardings in #14b8a6 and runs
+     its interface in #0d968b, and this file used to set both to #14b8a6 — which
+     is why every switch and button read a step brighter than the demo's. */
+  --primary: #0d968b;
+  --primary-hi: #0ea599;
+  --primary-ink: #ffffff;
   --secondary: #38bdf8;
   --danger: #f43f5e;
 
@@ -36,6 +58,13 @@
   --c-net: #38bdf8;
   --c-place: #a78bfa;
   --c-time: #fbbf24;
+  --c-junc: #e879f9;
+
+  /* Figure tones, straight from the demo's tile table. Each is the light step of
+     the hue its tile is capped with. */
+  --tone-cong: #fb7185;
+  --tone-junc: #f0abfc;
+  --tone-ride: #5eead4;
 
   /* Bus-speed bands, mirrored from core/palette.js. Band edges 8/15/22/30 km/h,
      with 15 matching the congestion threshold the KPI reports. Validated as a
@@ -56,26 +85,47 @@
   --font-head: 'Space Grotesk', 'Heebo', -apple-system, sans-serif;
   --font-num: 'Space Grotesk', 'Inter', ui-monospace, monospace;
 
-  --radius: 8px;
-  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-sm: 7px;
   --head-h: 52px;
-  --side-w: 300px;
-  --kpi-h: 62px;
+  /* 330px, the width the ODflow demo lays its sidebar out at. */
+  --side-w: 330px;
+  --kpi-h: 68px;
+
+  /* One spacing scale, so the gaps between things are deliberate rather than
+     whatever each component happened to type. Blocks breathe at --sp-4/--sp-5;
+     anything tighter than --sp-2 reads as "touching". */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 11px;
+  --sp-4: 15px;
+  --sp-5: 18px;
+  --sp-6: 24px;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Site light-section palette */
+  /* The site's own light-section tokens — --light / --light-card / --light-border,
+     same conversion as above, so the light theme mirrors the mockup too. */
   --bg: #f8fafc;
   --panel: #ffffff;
   --panel2: #f1f5f9;
   --line: #e2e8f0;
-  --line-soft: rgba(15, 31, 62, .08);
+  --line-soft: rgba(15, 31, 62, .07);
 
-  --ink: #0f1f3e;
-  --ink2: #48566a;
-  --ink3: #657b8b;
+  /* Translucent black over white, mirroring the dark theme's white-over-navy. */
+  --row: rgba(15, 31, 62, .025);
+  --row-hover: rgba(15, 31, 62, .055);
+  --row-line: rgba(15, 31, 62, .09);
+  /* A tenth of black is right over navy and muddy over white, so the light
+     theme sinks its wells with a much lighter wash of the ink colour. */
+  --well: rgba(15, 31, 62, .035);
+  --sw-off: rgba(15, 31, 62, .14);
+
+  --ink: #10203c;
+  --ink2: #4a5a6e;
+  --ink3: #70839a;
 
   --primary: #0f766e;
   --primary-hi: #0d9488;
@@ -88,6 +138,11 @@
   --c-net: #1d4ed8;
   --c-place: #6d28d9;
   --c-time: #b45309;
+  --c-junc: #a21caf;
+
+  --tone-cong: #be123c;
+  --tone-junc: #a21caf;
+  --tone-ride: #0f766e;
 
   /* Same five bands re-stepped for the light basemap. */
   --sp1: #e11d48;

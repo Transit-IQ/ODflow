@@ -49,15 +49,17 @@ h1, h2, h3, h4 { font-family: var(--font-head) }
 
 aside {
   grid-area: side;
-  background: var(--panel);
-  border-inline-end: 1px solid var(--line);
+  /* Translucent card over the page ground, as the demo has it — an opaque panel
+     made the sidebar a separate slab instead of a surface on the same page. */
+  background: color-mix(in srgb, var(--panel) 40%, transparent);
+  border-inline-end: 1px solid var(--row-line);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px 0 20px;
+  padding: var(--sp-2) 0 var(--sp-6);
 }
 
 aside::-webkit-scrollbar { width: 8px }
-aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px }
+aside::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .2); border-radius: 4px }
 
 #mapwrap {
   grid-area: map;
@@ -84,16 +86,30 @@ aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px }
 /* The dark basemap ships neutral grey. Tinting it toward the brand navy makes
    the map read as part of the product, and pushes the grey back far enough that
    the speed bands sit clearly in front of it. Applied to the base tiles only,
-   so the label layer above stays neutral and legible. */
+   so the label layer above stays neutral and legible.
+
+   The leading brightness is a *reduction*. It used to be brightness(1.55),
+   lifting CARTO's near-black Dark Matter into a range the sepia had something to
+   work with; Esri's Canvas Dark Gray starts several stops lighter, and carrying
+   that 1.55 over washed the whole city out to a pale blue.
+
+   The current values aim the ground at the ODflow demo's own map background,
+   #0f1f3e — deep and distinctly navy rather than the neutral grey an earlier
+   pass left it. The demo draws nothing at all outside its city polygon, so a
+   dim surround is the faithful reading, and the municipality lifts out of it
+   via the polygon fill in layers/boundary.js. Chosen by rendering candidates
+   against the real map and comparing them to the demo. */
 :root:not([data-theme="light"]) .basemap {
-  filter: brightness(1.55) sepia(.85) hue-rotate(179deg) saturate(2.4) brightness(.92);
+  filter: brightness(.45) sepia(.95) hue-rotate(180deg) saturate(3.1) brightness(.8);
 }
 
-/* Voyager's own colours are strong enough to argue with the speed bands, so the
-   basemap is held at low chroma: parks, water and built-up land stay readable
-   as context, and full saturation belongs to the data. */
+/* Esri's Canvas Gray light base is already near-neutral, so there is no chroma
+   to hold back here — the old saturate() dated from CARTO Voyager, whose parks
+   and water were strong enough to argue with the speed bands. Lifting it and
+   dropping its contrast pushes the ground further back, so the coloured network
+   is the only thing on the map asking for attention. */
 :root[data-theme="light"] .basemap {
-  filter: saturate(.5) brightness(1.04);
+  filter: brightness(1.06) contrast(.94);
 }
 
 .leaflet-popup-content-wrapper,
@@ -124,6 +140,19 @@ aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px }
 }
 
 .leaflet-bar a:hover { background-color: var(--panel2) !important; color: var(--primary) !important }
+
+/* Tile credit. Required by the tile terms, so it is always on screen — but it is
+   the least important thing on the map, so it is sized and faded to sit below
+   every figure the dashboard is actually reporting. */
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+  color: var(--ink3) !important;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm) 0 0 0;
+  direction: ltr;
+}
 
 /* ── Narrow screens ──────────────────────────────────────────────────────── */
 @media (max-width: 900px) {

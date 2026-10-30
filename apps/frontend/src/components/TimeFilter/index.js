@@ -11,8 +11,26 @@ const STOP_LABEL = '⏸ עצור';
 const STEP_MS = 1100;
 
 /**
- * The day / time-of-day cut, plus the speed-by-period sparkline that doubles as
- * a period picker and the day animation.
+ * The day / time-of-day cut, and the day animation.
+ *
+ * Each period is ONE row carrying everything known about that window: its name,
+ * its hours, and its average bus speed — the speed as a bar filling the row
+ * behind the text, the figure at the end.
+ *
+ * It used to be two controls. A list of seven period rows, then a sparkline of
+ * seven bars for the same seven periods, each clickable, each filtering to the
+ * same thing. Two ways to press the same button, and a reader comparing a
+ * period's name to its speed had to look in two places and match them up by
+ * position.
+ *
+ * The merge buys less height than it looks like it should — the sparkline and
+ * its caption were about 80px, and the roomier rows give most of that back, so
+ * the block went from 508px to 477px. The gain is that there is now one control
+ * instead of two and the speed sits on the same line as the label it belongs to.
+ *
+ * The bar is the row's background rather than a column of its own: Hebrew period
+ * names run long ("שעת שיא אחר הצהריים") and a dedicated bar column would have
+ * taken the width they need.
  *
  * `onReset` is supplied by main.js because a reset clears selections this
  * component doesn't own (active routes, the map view).
@@ -24,8 +42,7 @@ export function TimeFilter({ onReset } = {}) {
       <div class="days"></div>
       <div class="periods"></div>
       <div class="allp on">כל שעות היום (ממוצע)</div>
-      <div class="spark"></div>
-      <div class="spark-cap">מהירות ממוצעת לפי חלון זמן · לחיצה מסננת</div>
+      <div class="spark-cap">מהירות אוטובוס ממוצעת לפי חלון זמן · לחיצה מסננת</div>
       <div class="playrow">
         <button class="btn" data-play>${PLAY_LABEL}</button>
         <button class="btn ghost" data-reset title="איפוס כל הבחירות">איפוס</button>
@@ -35,7 +52,6 @@ export function TimeFilter({ onReset } = {}) {
   const daysEl = $(el, '.days');
   const periodsEl = $(el, '.periods');
   const allEl = $(el, '.allp');
-  const sparkEl = $(el, '.spark');
   const playBtn = $(el, '[data-play]');
 
   let playing = null;
@@ -55,14 +71,31 @@ export function TimeFilter({ onReset } = {}) {
   // hour ranges are the survey's, so they do not exist until the file has landed.
   function buildPeriods() {
     periodsEl.replaceChildren();
+
+    // Bars are scaled to the fastest period on screen, not to an absolute ceiling:
+    // the spread between a city's windows is what the reader is comparing, and
+    // against a fixed 0–60 scale seven urban speeds all look identically slow.
+    const speeds = periods.map((_, i) => periodSpeed(i));
+    const known = speeds.filter(v => v != null);
+    const max = known.length ? Math.max(...known) : 0;
+
     periods.forEach((_, i) => {
       const speedless = !hasSpeed(i);
+      const v = speeds[i];
+      // A floor of 6%, so the slowest window still shows a bar. A zero-width fill
+      // would read as "no data", which is a different statement and already has
+      // its own treatment below.
+      const fill = v == null || !max ? 0 : Math.max(6, (v / max) * 100);
+
       const row = html`
         <div class="prow${speedless ? ' no-speed' : ''}"
-             title="${speedless ? 'הסקר מדווח עליות בחלון זה; קובץ המהירויות אינו מכסה אותו' : ''}">
+             style="--fill:${fill.toFixed(1)}%;--band:${v == null ? 'transparent' : speedColor(v)}"
+             title="${periodName(i)} ${hoursLabel(i)}${speedless
+               ? ' · הסקר מדווח עליות בחלון זה; קובץ המהירויות אינו מכסה אותו'
+               : ` · ${v.toFixed(1)} קמ״ש`}">
           <span class="pn">P${i + 1}</span>
           <span class="pl">${periodName(i)}</span>
-          <span class="pt">${hoursLabel(i)}</span>
+          <span class="pt" dir="ltr">${hoursLabel(i)}</span>
         </div>`;
       row.addEventListener('click', () => setState({ period: i }));
       periodsEl.appendChild(row);
@@ -96,43 +129,19 @@ export function TimeFilter({ onReset } = {}) {
     onReset?.();
   });
 
-  // ── Sparkline ───────────────────────────────────────────────────────────
+  // ── Speed per period ────────────────────────────────────────────────────
   /**
-   * One bar per period, so the sparkline and the pills are the same axis.
-   *
    * speed_profile is indexed by speed WINDOW, and a period can hold two of them
-   * (04-06) or none (the 00-04 night the speed file does not cover), so a bar's
-   * value is the mean of whatever windows its period holds. The night bar is
-   * drawn empty and captioned rather than dropped: the survey has real boardings
-   * there, and a missing bar would read as a period that does not exist.
+   * (04-06) or none (the 00-04 night the speed file does not cover), so a
+   * period's speed is the mean of whatever windows it holds. A period with no
+   * window stays null and is drawn as "no reading" rather than dropped: the
+   * survey has real boardings there, and a missing row would read as a period
+   * that does not exist.
    */
   function periodSpeed(i) {
     const idx = speedIndices(i);
     const vals = idx.map(w => data.speedProfile?.[w]).filter(v => v != null);
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  }
-
-  function buildSpark() {
-    sparkEl.replaceChildren();
-    if (!data.speedProfile || !periods.length) return;
-
-    const vals = periods.map((_, i) => periodSpeed(i));
-    const known = vals.filter(v => v != null);
-    const max = known.length ? Math.max(...known) : 1;
-
-    vals.forEach((v, i) => {
-      const h = v == null ? 0 : (v / max) * 100;
-      const cap = `${periodName(i)} ${hoursLabel(i)}`;
-      const bar = html`
-        <div class="spk${v == null ? ' no-speed' : ''}" title="${cap}${v == null ? ' · אין נתוני מהירות בחלון זה' : ` · ${v.toFixed(1)} קמ״ש`}">
-          <span class="val">${v == null ? '—' : v.toFixed(0)}</span>
-          <span class="bar-wrap"><span class="bar" style="height:${h}%;background:${speedColor(v)}"></span></span>
-          <span class="lab">P${i + 1}</span>
-        </div>`;
-      bar.addEventListener('click', () => setState({ period: i }));
-      sparkEl.appendChild(bar);
-    });
-    sync();
   }
 
   function sync() {
@@ -142,10 +151,9 @@ export function TimeFilter({ onReset } = {}) {
     });
     [...periodsEl.children].forEach((c, i) => c.classList.toggle('on', state.period === i));
     allEl.classList.toggle('on', state.period === 'all');
-    [...sparkEl.children].forEach((c, i) => c.classList.toggle('on', state.period === i));
   }
 
   sync();
 
-  return { el, sync, buildPeriods, buildSpark, stopPlaying };
+  return { el, sync, buildPeriods, stopPlaying };
 }

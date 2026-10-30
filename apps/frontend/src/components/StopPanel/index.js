@@ -5,6 +5,7 @@ import { data, loadRoutesIndex } from '../../core/data.js';
 import { routesAtStop } from '../../core/stopRoutes.js';
 import { fmtNum, escHtml } from '../../core/format.js';
 import { stopRamp } from '../../core/palette.js';
+import { keptReason, KEPT_REASON } from '../../core/suggest.js';
 import { map } from '../../core/map.js';
 import * as stops from '../../layers/stops.js';
 import * as routes from '../../layers/routes.js';
@@ -22,6 +23,37 @@ function scopeLabel() {
   const picked = state.areaRecords;
   if (!picked.length) return 'ברחבי העיר';
   return picked.length === 1 ? `ב${picked[0].name}` : `ב-${fmtNum(picked.length)} שכונות נבחרות`;
+}
+
+/**
+ * What the קווים מוצעים proposal does to this stop, when the proposal is on.
+ *
+ * A struck-through dot on the map is a claim about one stop, and this is where a
+ * reader comes to check it — so the verdict names the figure it was made on. When
+ * the stop survived despite being over the threshold, the exemption that saved it
+ * is named: "it's above your limit but it's a terminal" is the answer to the
+ * question the reader actually has.
+ */
+function suggestVerdict(s) {
+  if (!state.suggest.on || !routes.activeRoutes().length) return '';
+
+  const dropped = stops.stopsState.removed.has(s);
+  const reason = keptReason(s, state.suggest.pctMax);
+  const pct = s.transfer_pct != null ? `${s.transfer_pct.toFixed(0)}%` : '—';
+
+  if (dropped) {
+    return `<div class="stop-verdict is-dropped">
+              הוסרה מהקו המוצע · ${pct} נסיעות מעבר (מעל ${state.suggest.pctMax}%)
+            </div>`;
+  }
+
+  const why = reason === KEPT_REASON.terminal
+    ? 'תחנת קצה — אינה מוסרת'
+    : reason === KEPT_REASON.unsurveyed
+      ? 'לא נכללה בסקר — אין אחוז נסיעות מעבר'
+      : `${pct} נסיעות מעבר (עד ${state.suggest.pctMax}%)`;
+
+  return `<div class="stop-verdict is-kept">נשמרה בקו המוצע · ${why}</div>`;
 }
 
 function tile(value, label, accent) {
@@ -187,6 +219,8 @@ export function StopPanel({ onRoutesChanged } = {}) {
         <div class="stop-title">${escHtml(s.name)}</div>
         <div class="stop-sub">מק״ט ${escHtml(s.code)} · ${s.routes.length || s.routes_reported || 0} קווים${address ? ' · ' + escHtml(address) : ''}</div>
       </div>
+
+      ${suggestVerdict(s)}
 
       <div class="stop-tiles">
         ${tile(fmtNum(s.departures_day), 'עצירות מתוזמנות ביום')}

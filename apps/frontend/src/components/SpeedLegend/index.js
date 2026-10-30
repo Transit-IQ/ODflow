@@ -13,17 +13,17 @@ export function SpeedLegend() {
     const lo = i === 0 ? 0 : SPEED_BREAKS[i - 1];
     const hi = i < SPEED_BREAKS.length ? SPEED_BREAKS[i] : null;
     const range = hi == null ? `${lo}+` : `${lo}–${hi}`;
-    return `<span style="background:var(--sp${i + 1})" title="${range} קמ״ש · ${note}"></span>`;
+    return `<div class="ramp-band" title="${range} קמ״ש · ${note}">
+              <span style="background:var(--sp${i + 1})"></span>
+              <i>${range}</i>
+            </div>`;
   }).join('');
-
-  const ticks = ['0', ...SPEED_BREAKS.map(String), '+']
-    .map(t => `<i>${t}</i>`).join('');
 
   const el = html`
     <div class="block" style="--tint:var(--ramp)">
       <h3>מקרא מהירות</h3>
+      <div class="ramp-cap">מהירות אוטובוס (קמ״ש)</div>
       <div class="ramp-bar">${bands}</div>
-      <div class="ramp-ticks">${ticks}</div>
       <div class="ramp-note">
         קמ״ש · קו עבה = איטי יותר. סף הגודש בדוח הוא <b>${CONGESTION_KMH} קמ״ש</b>.
       </div>

@@ -117,7 +117,7 @@ export function AreaPanel({ onAreaChange } = {}) {
           <span class="neigh-stat-lbl">בני 60+</span>
         </div>
       </div>
-      <div class="neigh-stat-src">מקור: אזורים סטטיסטיים למ״ס 2022, עיריית תל אביב-יפו</div>`;
+      <div class="neigh-stat-src">מקור: אזורים סטטיסטיים למ״ס 2022${data.city?.name ? `, ${escHtml(data.city.name)}` : ''}</div>`;
     statsEl.hidden = false;
   }
 
@@ -176,7 +176,11 @@ export function AreaPanel({ onAreaChange } = {}) {
 
   function renderPicker() {
     const q = searchEl.value.trim();
-    const rows = data.neighbourhoods.filter(n => !q || n.name.includes(q));
+    // Numeric-aware, so "שכונה 2" lands before "שכונה 12", and Hebrew names follow
+    // alphabetically.
+    const rows = data.neighbourhoods
+      .filter(n => !q || n.name.includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'he', { numeric: true }));
 
     pickListEl.replaceChildren(...rows.map(n => {
       const on = selected.has(n.id);

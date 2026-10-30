@@ -15,15 +15,33 @@ export const cityBorderLayer = L.layerGroup();
 let highlight = null;
 
 function outlineStyle(extra = {}) {
-  return { color: mapColors().focus, opacity: 0.7, fill: false, dashArray: '4 4', ...extra };
+  return { color: mapColors().focus, opacity: 0.45, fill: false, dashArray: '4 4', ...extra };
 }
 
-/** Draw (or redraw, on a theme flip) the city-limits outline. */
+/**
+ * Draw (or redraw, on a theme flip) the city-limits outline.
+ *
+ * Stroke values are the demo's: teal at 0.45, 1.2px, dashed `5 4`.
+ *
+ * The demo also *fills* its city polygon, with #13284a — one step up from the
+ * page ground — so the municipality reads as a lighter field inside a darker
+ * surround. That is worth copying, but not at the demo's 0.55: its ground is a
+ * flat SVG with nothing underneath, while ours has an actual street network to
+ * keep visible. At 0.3 the city still lifts off its surroundings and the streets
+ * still read through it.
+ */
 export function drawCityBorder(geoJson) {
   cityBorderLayer.clearLayers();
   if (!geoJson) return;
   L.geoJSON(geoJson, {
-    style: outlineStyle({ weight: 2, opacity: 0.75, dashArray: '6 4' }),
+    style: outlineStyle({
+      weight: 1.2,
+      opacity: 0.45,
+      dashArray: '5 4',
+      fill: true,
+      fillColor: mapColors().cityFill,
+      fillOpacity: 0.3,
+    }),
   }).addTo(cityBorderLayer);
 }
 
