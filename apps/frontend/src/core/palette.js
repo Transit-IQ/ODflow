@@ -169,22 +169,3 @@ const STOP_RAMP = {
 export function stopRamp() {
   return isLight() ? STOP_RAMP.light : STOP_RAMP.dark;
 }
-
-// ── Junction volumes ─────────────────────────────────────────────────────────
-// A fuchsia ramp, built the same way as the stop ramp above: low-to-high, so more
-// traffic always reads as stronger, brightening on the dark basemap and darkening
-// on the light one.
-//
-// The hue is doing real work. Every other hue on this map is spoken for — teal is
-// boardings, sky is the network, violet is destinations, rose is congestion, amber
-// is the time axis — and a junction dot sharing any of them would be read as that
-// layer at a glance. Shape carries the distinction too (the layer draws diamonds,
-// not circles), but colour is what survives at city zoom.
-const JUNC_RAMP = {
-  dark: ['#701a75', '#86198f', '#a21caf', '#d946ef', '#f0abfc'],
-  light: ['#e879f9', '#d946ef', '#a21caf', '#86198f', '#4a044e'],
-};
-
-export function juncRamp() {
-  return isLight() ? JUNC_RAMP.light : JUNC_RAMP.dark;
-}

@@ -1,11 +1,10 @@
 import './LayerToggles.css';
 import { html, $ } from '../../core/dom.js';
 import { state, setState, notify } from '../../core/store.js';
-import { DEST_FAMILIES, destFamilyColor, stopRamp, juncRamp } from '../../core/palette.js';
+import { DEST_FAMILIES, destFamilyColor, stopRamp } from '../../core/palette.js';
 import { data } from '../../core/data.js';
 import { colorOf, familyOf } from '../../layers/destinations.js';
 import { stopsState, valueLabel } from '../../layers/stops.js';
-import { junctionsState, valueLabel as juncValueLabel } from '../../layers/junctions.js';
 import { fmtNum, escHtml } from '../../core/format.js';
 
 /**
@@ -129,31 +128,6 @@ export function LayerToggles() {
       <div class="stops-legend-note">גודל העיגול ביחס למספר העליות</div>`;
   }
 
-  /**
-   * The junction ramp, printed from the breaks the layer actually classified with.
-   *
-   * The demo line is part of the legend rather than a footnote under it: a legend
-   * is read as the key to what the map means, so the fact that these numbers are
-   * invented belongs inside it.
-   */
-  function renderJuncLegend() {
-    // The junction switch is retired, so there is no legend slot to fill.
-    const juncLegendEl = $(el, '#juncLegend');
-    if (!juncLegendEl || !data.junctions) return;
-    const ramp = juncRamp();
-    const rows = ramp.map((c, i) => {
-      const lo = i === 0 ? 0 : junctionsState.breaks[i - 1];
-      const hi = i < junctionsState.breaks.length ? junctionsState.breaks[i] : null;
-      const label = hi == null ? `${fmtNum(lo)}+` : `${fmtNum(lo)}–${fmtNum(hi)}`;
-      return `<div class="lg"><span style="background:${c}"></span> ${label}</div>`;
-    }).join('');
-
-    juncLegendEl.innerHTML = `
-      <div class="stops-legend-title">${escHtml(juncValueLabel())} · ${fmtNum(junctionsState.visible.length)} צמתים</div>
-      ${rows}
-      <div class="stops-legend-note">גודל המעוין ביחס לנפח · הנפחים הם נתוני דמו סינתטיים</div>`;
-  }
-
   /** Show or hide the panels that only make sense when their layer is on. */
   function syncPanels() {
     catsEl.hidden = !state.layers.dest;
@@ -163,5 +137,5 @@ export function LayerToggles() {
 
   syncPanels();
 
-  return { el, renderCategories, renderStopsLegend, renderJuncLegend, syncPanels };
+  return { el, renderCategories, renderStopsLegend, syncPanels };
 }

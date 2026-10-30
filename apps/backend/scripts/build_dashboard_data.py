@@ -22,7 +22,7 @@ from shapely.prepared import prep
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from services import gtfs_loader, gis_loader, junctions_mock, municipal_loader, taltan_loader  # noqa: E402
+from services import gtfs_loader, gis_loader, municipal_loader, taltan_loader  # noqa: E402
 from paths import ACTIVE_CITY, CITY_LABEL, FRONTEND_PUBLIC_DATA_DIR as OUT_DIR, REPO_ROOT as ROOT  # noqa: E402
 
 # The Israeli MOT GTFS publishes a new route_id per timetable revision, so
@@ -503,59 +503,6 @@ def build_neighbourhoods(idx: dict, trips_by_route: dict, neighbourhoods_config:
     return {"neighbourhoods": neighbourhoods_result, "routes": routes_out}
 
 
-def build_junctions_layer(bands: list[str], border: dict) -> None:
-    """
-    Write ``junctions.json`` — signalized-junction turning volumes.
-
-    The counts are synthetic; the junctions themselves are not. See
-    ``services/junctions_mock.py`` for exactly which half is invented and why the
-    payload announces it.
-
-    Its input is ``roads.geojson``, which is produced by the *other* script,
-    ``build_roads.py``, out of an OSM extract this pipeline never reads. That makes
-    it the one output here with a prerequisite outside its own run, so a missing
-    file is reported and skipped rather than raised: nobody should lose a whole
-    rebuild of the speed network because an optional demo layer had nothing to
-    stand on.
-    """
-    roads_path = OUT_DIR / "roads.geojson"
-    if not roads_path.exists():
-        print(f"=== No {roads_path.relative_to(ROOT)} — skipping junctions layer ===")
-        print("    (run scripts/build_roads.py first to generate it)")
-        return
-
-    print("=== Building signalized-junction layer (MOCK volumes, real geometry) ===")
-    payload = junctions_mock.build_junctions(roads_path, bands)
-
-    # roads.geojson is a per-city artefact, and it is NOT rebuilt by this script —
-    # it comes from build_roads.py and an OSM extract. So a city switch can leave
-    # the previous city's roads sitting in place, and the junctions derived from
-    # them land tens of kilometres from the map the dashboard is drawing. That
-    # happened on the first Rahat run: Tel Aviv junctions, Rahat border, no error.
-    #
-    # Dropping the out-of-area ones silently would be just as bad, because the
-    # result is an empty layer that looks like "this city has no junctions". So the
-    # mismatch is reported and the stale file is left untouched rather than
-    # overwritten with a wrong one.
-    city = shape(border["geometry"])
-    inside = [j for j in payload["junctions"] if city.contains(Point(j["lon"], j["lat"]))]
-
-    if not inside:
-        print(f"  !! none of the {len(payload['junctions'])} junctions fall inside {CITY_LABEL}.")
-        print(f"     {roads_path.relative_to(ROOT)} describes a different city — rebuild it")
-        print("     for this one. Leaving the existing junctions.json untouched.")
-        return
-
-    dropped = len(payload["junctions"]) - len(inside)
-    if dropped:
-        print(f"  dropped {dropped} junctions outside the city boundary")
-    payload["junctions"] = inside
-
-    legs = sum(len(j["approaches"]) for j in inside)
-    print(f"  {len(inside)} junctions, {legs} approaches — counts are synthetic, flagged mock:true")
-    write_json("junctions.json", payload)
-
-
 def main():
     idx = build_gtfs_index()
     gis = build_gis_index()
@@ -631,8 +578,6 @@ def main():
     outline = shape(gis["border"]["geometry"]).intersection(box(-180, -90, 180, north))
     write_json("border.json", {**gis["border"], "geometry": mapping(outline)})
     write_json("neighbourhood_routes.json", neighbourhoods_data["routes"])
-
-    build_junctions_layer(stops_data["bands"], gis["border"])
 
     print("Done.")
 

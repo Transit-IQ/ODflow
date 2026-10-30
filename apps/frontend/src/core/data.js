@@ -25,9 +25,6 @@ export const data = {
   neighbourhoods: [],    // selectable areas
   routesById: null,      // route_id → route record — lazy
   roads: null,           // GeoJSON FeatureCollection — lazy
-  junctions: null,       // { mock, source, bands, junctions } — lazy. `mock` is true:
-                         // the counts are synthetic (see services/junctions_mock.py)
-                         // and every consumer is expected to say so on screen.
 };
 
 async function getJson(name) {
@@ -119,12 +116,5 @@ export function loadRoads() {
   return once('roads', async () => {
     data.roads = await getJson('roads.geojson');
     return data.roads;
-  });
-}
-
-export function loadJunctions() {
-  return once('junctions', async () => {
-    data.junctions = await getJson('junctions.json');
-    return data.junctions;
   });
 }
